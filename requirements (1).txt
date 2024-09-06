@@ -1,0 +1,7 @@
+streamlit==1.26.0
+pygwalker==0.3.5
+pandas
+plotly==5.14.1
+numpy
+scipy
+statsmodels
