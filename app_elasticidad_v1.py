@@ -7,6 +7,7 @@ from scipy.stats import gaussian_kde
 # Cargar los datos de ventas e inventario
 df_ventas = pd.read_csv('ventas_para_elasticidad.csv')
 df_inventario = pd.read_csv('inventario_para_elasticidad.csv')
+df_despacho = pd.read_csv('despacho_para_elasticidad.csv')
 
 df_recomendacion = pd.read_csv('recomendacion_rango_precios.csv')
 
@@ -39,11 +40,23 @@ df_inventario_grouped = df_inventario_filtered.groupby('f126_precio').agg(
     Cantidad_Inventario=('Cantidad_Inventario', 'sum')
 ).reset_index()
 
+# Filtrar y agrupar los datos de despacho
+df_despacho_filtered = df_despacho[(df_despacho['Marca'] == marca) & 
+                                       (df_despacho['Genero'] == genero) & 
+                                       (df_despacho['Tipo'] == tipo) & 
+                                       (df_despacho['nombrealmacen'] == tienda)]
+
+df_despacho_grouped = df_despacho_filtered.groupby('f126_precio').agg(
+    Cantidad_Despacho=('Despacho', 'sum')
+).reset_index()
+
 # Crear un rango continuo para los precios
 precio_unitario_range = np.linspace(min(df_ventas_grouped['Precio_unitario_promedio'].min(), 
-                                        df_inventario_grouped['f126_precio'].min()), 
+                                        df_inventario_grouped['f126_precio'].min(),
+                                        df_despacho_grouped['f126_precio'].min()), 
                                     max(df_ventas_grouped['Precio_unitario_promedio'].max(), 
-                                        df_inventario_grouped['f126_precio'].max()), 
+                                        df_inventario_grouped['f126_precio'].max(),
+                                        df_despacho_grouped['f126_precio'].max()), 
                                     1000)
 
 # Ajustar la curva de densidad para las ventas
@@ -53,6 +66,10 @@ density_ventas = kde_ventas(precio_unitario_range)
 # Ajustar la curva de densidad para el inventario
 kde_inventario = gaussian_kde(df_inventario_grouped['f126_precio'], weights=df_inventario_grouped['Cantidad_Inventario'])
 density_inventario = kde_inventario(precio_unitario_range)
+
+# Ajustar la curva de densidad para el despacho
+kde_despacho = gaussian_kde(df_despacho_grouped['f126_precio'], weights=df_despacho_grouped['Cantidad_Despacho'])
+density_despacho = kde_despacho(precio_unitario_range)
 
 # Crear los intervalos para df_inventario_grouped
 bins = pd.cut(df_inventario_grouped['f126_precio'], bins=10, right=False)
@@ -70,6 +87,10 @@ df_ventas_grouped_by_interval = df_ventas_grouped.groupby('Precio_Intervalo').ag
 
 df_inventario_grouped_by_interval = df_inventario_grouped.groupby('Precio_Intervalo').agg(
     Cantidad_Inventario=('Cantidad_Inventario', 'sum')
+).reset_index()
+
+df_despacho_grouped_by_interval = df_despacho_grouped.groupby('Precio_Intervalo').agg(
+    Cantidad_Despacho=('Cantidad_Despacho', 'sum')
 ).reset_index()
 
 # Calcular el porcentaje de ventas por intervalo
@@ -95,13 +116,16 @@ plt.plot(precio_unitario_range, density_ventas, color='red', label='Curva de Den
 # Curva de densidad de inventario
 plt.plot(precio_unitario_range, density_inventario, color='blue', label='Curva de Densidad de Inventario')
 
+# Curva de densidad de inventario
+plt.plot(precio_unitario_range, density_despacho, color='black', label='Curva de Densidad de Despacho')
+
 # Curva de densidad de porcentaje de ventas
 plt.plot(precio_unitario_range, density_porcentaje_ventas, color='green', label='Curva de Inventario Propuesta')
 
 # Configurar las etiquetas y leyenda
 plt.xlabel('Precio Unitario Promedio')
 plt.ylabel('Densidad')
-plt.title('Curvas de Densidad para Ventas, Inventario y Porcentaje de Ventas')
+plt.title('Curvas de Densidad para Ventas, Inventario, Despacho y Porcentaje de Ventas')
 plt.legend()
 plt.grid(True)
 st.pyplot(plt)
