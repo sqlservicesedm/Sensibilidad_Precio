@@ -79,7 +79,10 @@ df_inventario_grouped['Precio_Intervalo'] = bins.apply(lambda x: f"[{x.left:.1f}
 df_ventas_grouped['Precio_Intervalo'] = pd.cut(df_ventas_grouped['Precio_unitario_promedio'], 
                                                bins=bins.cat.categories, 
                                                right=False)
-
+# Aplicar los mismos intervalos a df_ventas_grouped
+df_despacho_grouped['Precio_Intervalo'] = pd.cut(df_despacho_grouped['f126_precio'], 
+                                               bins=bins.cat.categories, 
+                                               right=False)
 # Agrupar por intervalos y sumar las ventas
 df_ventas_grouped_by_interval = df_ventas_grouped.groupby('Precio_Intervalo').agg(
     Cantidad_Ventas=('Cantidad_Ventas', 'sum')
@@ -90,7 +93,7 @@ df_inventario_grouped_by_interval = df_inventario_grouped.groupby('Precio_Interv
 ).reset_index()
 
 df_despacho_grouped_by_interval = df_despacho_grouped.groupby('Precio_Intervalo').agg(
-    Cantidad_Despacho=('Cantidad_Despacho', 'sum')
+     Cantidad_Despacho=('Cantidad_Despacho', 'sum')
 ).reset_index()
 
 # Calcular el porcentaje de ventas por intervalo
