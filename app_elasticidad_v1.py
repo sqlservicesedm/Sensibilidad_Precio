@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -18,30 +19,46 @@ st.title('Análisis de Elasticidad: Curvas de Densidad y Optimización de Invent
 marca = st.selectbox('Selecciona la Marca:', df_ventas['Marca'].unique())
 genero = st.selectbox('Selecciona el Género:', df_ventas['Genero'].unique())
 tipo = st.selectbox('Selecciona el Tipo:', df_ventas['Tipo'].unique())
-tienda = st.selectbox('Selecciona la Tienda:', df_ventas['Tienda'].unique())
+tienda_options = np.append(df_ventas['Tienda'].unique(), 'Todas las tiendas')
+tienda = st.selectbox('Selecciona la Tienda:', tienda_options)
 
 # Filtrar y agrupar los datos de ventas
-df_ventas_filtered = df_ventas[(df_ventas['Marca'] == marca) & 
-                                (df_ventas['Genero'] == genero) & 
-                                (df_ventas['Tipo'] == tipo) & 
-                                (df_ventas['Tienda'] == tienda)]
+if tienda == 'Todas las tiendas':
+    df_ventas_filtered = df_ventas[(df_ventas['Marca'] == marca) & 
+                                    (df_ventas['Genero'] == genero) & 
+                                    (df_ventas['Tipo'] == tipo)]
+else:
+    df_ventas_filtered = df_ventas[(df_ventas['Marca'] == marca) & 
+                                    (df_ventas['Genero'] == genero) & 
+                                    (df_ventas['Tipo'] == tipo) & 
+                                    (df_ventas['Tienda'] == tienda)]
 
 df_ventas_grouped = df_ventas_filtered.groupby('Precio_unitario_promedio').agg(
     Cantidad_Ventas=('Cantidad', 'sum')
 ).reset_index()
 
 # Filtrar y agrupar los datos de inventario
-df_inventario_filtered = df_inventario[(df_inventario['Marca'] == marca) & 
-                                       (df_inventario['Genero'] == genero) & 
-                                       (df_inventario['Tipo'] == tipo) & 
-                                       (df_inventario['Descripcion_bodega'] == tienda)]
+if tienda == 'Todas las tiendas':
+    df_inventario_filtered = df_inventario[(df_inventario['Marca'] == marca) & 
+                                           (df_inventario['Genero'] == genero) & 
+                                           (df_inventario['Tipo'] == tipo)]
+else:
+    df_inventario_filtered = df_inventario[(df_inventario['Marca'] == marca) & 
+                                           (df_inventario['Genero'] == genero) & 
+                                           (df_inventario['Tipo'] == tipo) & 
+                                           (df_inventario['Descripcion_bodega'] == tienda)]
 
 df_inventario_grouped = df_inventario_filtered.groupby('f126_precio').agg(
     Cantidad_Inventario=('Cantidad_Inventario', 'sum')
 ).reset_index()
 
 # Filtrar y agrupar los datos de despacho
-df_despacho_filtered = df_despacho[(df_despacho['Marca'] == marca) & 
+if tienda == 'Todas las tiendas':
+    df_despacho_filtered = df_despacho[(df_despacho['Marca'] == marca) & 
+                                       (df_despacho['Genero'] == genero) & 
+                                       (df_despacho['Tipo'] == tipo)]
+else:
+    df_despacho_filtered = df_despacho[(df_despacho['Marca'] == marca) & 
                                        (df_despacho['Genero'] == genero) & 
                                        (df_despacho['Tipo'] == tipo) & 
                                        (df_despacho['nombrealmacen'] == tienda)]
@@ -49,6 +66,7 @@ df_despacho_filtered = df_despacho[(df_despacho['Marca'] == marca) &
 df_despacho_grouped = df_despacho_filtered.groupby('f126_precio').agg(
     Cantidad_Despacho=('Despacho', 'sum')
 ).reset_index()
+
 
 # Crear un rango continuo para los precios
 precio_unitario_range = np.linspace(min(df_ventas_grouped['Precio_unitario_promedio'].min(), 
