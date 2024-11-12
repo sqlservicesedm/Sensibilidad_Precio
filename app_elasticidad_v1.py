@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -22,11 +21,22 @@ tipo = st.selectbox('Selecciona el Tipo:', df_ventas['Tipo'].unique())
 tienda_options = np.append(df_ventas['Tienda'].unique(), 'Todas las tiendas')
 tienda = st.selectbox('Selecciona la Tienda:', tienda_options)
 
+
+tiendas_excluidas = ['COBRO A TRANSPORTADORAS','MUESTRAS FISICAS PROVEEDORES SERVICIOS',
+                     'NOVEDADES TIENDAS ONLINE','PILATOS ACCESORIOS SAN SILVIESTRE',
+                     'PRESTAMO EMPLEADOS','TEMPORAL 5','PILATOS GRAN PLAZA ALCARAVAN YOPAL',
+                     'PLANTA PILOTO COSTURA','GARANTIAS EDM','FALTANTES DESPACHOS CEDI',
+                     'TEMPORAL 2','BODEGA DEVOLUCIONES ONLINE','RECUPERACION DE ROPA',
+                     'NOVEDADES EN IMPORTACION','BODEGA DE SEGUNDAS OBSOLETAS',
+                     'CONFE CONCILIACION','SEGUNDAS']
+
+
 # Filtrar y agrupar los datos de ventas
 if tienda == 'Todas las tiendas':
     df_ventas_filtered = df_ventas[(df_ventas['Marca'] == marca) & 
                                     (df_ventas['Genero'] == genero) & 
-                                    (df_ventas['Tipo'] == tipo)]
+                                    (df_ventas['Tipo'] == tipo) & 
+                                    (~df_ventas['Tienda'].isin(tiendas_excluidas))]
 else:
     df_ventas_filtered = df_ventas[(df_ventas['Marca'] == marca) & 
                                     (df_ventas['Genero'] == genero) & 
