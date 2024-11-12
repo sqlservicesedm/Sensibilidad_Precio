@@ -51,7 +51,8 @@ df_ventas_grouped = df_ventas_filtered.groupby('Precio_unitario_promedio').agg(
 if tienda == 'Todas las tiendas':
     df_inventario_filtered = df_inventario[(df_inventario['Marca'] == marca) & 
                                            (df_inventario['Genero'] == genero) & 
-                                           (df_inventario['Tipo'] == tipo)]
+                                           (df_inventario['Tipo'] == tipo) &
+                                           (~df_inventario['Tienda'].isin(tiendas_excluidas))]
 else:
     df_inventario_filtered = df_inventario[(df_inventario['Marca'] == marca) & 
                                            (df_inventario['Genero'] == genero) & 
@@ -66,7 +67,8 @@ df_inventario_grouped = df_inventario_filtered.groupby('f126_precio').agg(
 if tienda == 'Todas las tiendas':
     df_despacho_filtered = df_despacho[(df_despacho['Marca'] == marca) & 
                                        (df_despacho['Genero'] == genero) & 
-                                       (df_despacho['Tipo'] == tipo)]
+                                       (df_despacho['Tipo'] == tipo)&
+                                       (~df_despacho['Tienda'].isin(tiendas_excluidas))]
 else:
     df_despacho_filtered = df_despacho[(df_despacho['Marca'] == marca) & 
                                        (df_despacho['Genero'] == genero) & 
