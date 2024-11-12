@@ -52,7 +52,7 @@ if tienda == 'Todas las tiendas':
     df_inventario_filtered = df_inventario[(df_inventario['Marca'] == marca) & 
                                            (df_inventario['Genero'] == genero) & 
                                            (df_inventario['Tipo'] == tipo) &
-                                           (~df_inventario['Tienda'].isin(tiendas_excluidas))]
+                                           (~df_inventario['Descripcion_bodega'].isin(tiendas_excluidas))]
 else:
     df_inventario_filtered = df_inventario[(df_inventario['Marca'] == marca) & 
                                            (df_inventario['Genero'] == genero) & 
@@ -68,7 +68,7 @@ if tienda == 'Todas las tiendas':
     df_despacho_filtered = df_despacho[(df_despacho['Marca'] == marca) & 
                                        (df_despacho['Genero'] == genero) & 
                                        (df_despacho['Tipo'] == tipo)&
-                                       (~df_despacho['Tienda'].isin(tiendas_excluidas))]
+                                       (~df_despacho['nombrealmacen'].isin(tiendas_excluidas))]
 else:
     df_despacho_filtered = df_despacho[(df_despacho['Marca'] == marca) & 
                                        (df_despacho['Genero'] == genero) & 
