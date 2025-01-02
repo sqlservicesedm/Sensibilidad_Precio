@@ -20,6 +20,8 @@ genero = st.selectbox('Selecciona el Género:', df_ventas['Genero'].unique())
 tipo = st.selectbox('Selecciona el Tipo:', df_ventas['Tipo'].unique())
 tienda_options = np.append(df_ventas['Tienda'].unique(), 'Todas las tiendas')
 tienda = st.selectbox('Selecciona la Tienda:', tienda_options)
+precios = np.array([50000,100000,150000,200000,250000,300000,350000,400000,450000,500000])
+excluir = st.selectbox('Selecciona el precio minimo:', precios)
 
 
 tiendas_excluidas = ['COBRO A TRANSPORTADORAS','MUESTRAS FISICAS PROVEEDORES SERVICIOS',
@@ -36,12 +38,14 @@ if tienda == 'Todas las tiendas':
     df_ventas_filtered = df_ventas[(df_ventas['Marca'] == marca) & 
                                     (df_ventas['Genero'] == genero) & 
                                     (df_ventas['Tipo'] == tipo) & 
-                                    (~df_ventas['Tienda'].isin(tiendas_excluidas))]
+                                    (~df_ventas['Tienda'].isin(tiendas_excluidas))&
+                                    (df_ventas['Precio_unitario_promedio']>=excluir)]
 else:
     df_ventas_filtered = df_ventas[(df_ventas['Marca'] == marca) & 
                                     (df_ventas['Genero'] == genero) & 
                                     (df_ventas['Tipo'] == tipo) & 
-                                    (df_ventas['Tienda'] == tienda)]
+                                    (df_ventas['Tienda'] == tienda) &
+                                    (df_ventas['Precio_unitario_promedio']>=excluir)]
 
 df_ventas_grouped = df_ventas_filtered.groupby('Precio_unitario_promedio').agg(
     Cantidad_Ventas=('Cantidad', 'sum')
@@ -52,12 +56,14 @@ if tienda == 'Todas las tiendas':
     df_inventario_filtered = df_inventario[(df_inventario['Marca'] == marca) & 
                                            (df_inventario['Genero'] == genero) & 
                                            (df_inventario['Tipo'] == tipo) &
-                                           (~df_inventario['Descripcion_bodega'].isin(tiendas_excluidas))]
+                                           (~df_inventario['Descripcion_bodega'].isin(tiendas_excluidas)) &
+                                           (df_inventario['f126_precio']>=excluir)]
 else:
     df_inventario_filtered = df_inventario[(df_inventario['Marca'] == marca) & 
                                            (df_inventario['Genero'] == genero) & 
                                            (df_inventario['Tipo'] == tipo) & 
-                                           (df_inventario['Descripcion_bodega'] == tienda)]
+                                           (df_inventario['Descripcion_bodega'] == tienda) &
+                                           (df_inventario['f126_precio']>=excluir)]
 
 df_inventario_grouped = df_inventario_filtered.groupby('f126_precio').agg(
     Cantidad_Inventario=('Cantidad_Inventario', 'sum')
@@ -68,12 +74,14 @@ if tienda == 'Todas las tiendas':
     df_despacho_filtered = df_despacho[(df_despacho['Marca'] == marca) & 
                                        (df_despacho['Genero'] == genero) & 
                                        (df_despacho['Tipo'] == tipo)&
-                                       (~df_despacho['nombrealmacen'].isin(tiendas_excluidas))]
+                                       (~df_despacho['nombrealmacen'].isin(tiendas_excluidas)) &
+                                       (df_despacho['f126_precio']>=excluir)]
 else:
     df_despacho_filtered = df_despacho[(df_despacho['Marca'] == marca) & 
                                        (df_despacho['Genero'] == genero) & 
                                        (df_despacho['Tipo'] == tipo) & 
-                                       (df_despacho['nombrealmacen'] == tienda)]
+                                       (df_despacho['nombrealmacen'] == tienda) &
+                                       (df_despacho['f126_precio']>=excluir)]
 
 df_despacho_grouped = df_despacho_filtered.groupby('f126_precio').agg(
     Cantidad_Despacho=('Despacho', 'sum')
@@ -81,12 +89,16 @@ df_despacho_grouped = df_despacho_filtered.groupby('f126_precio').agg(
 
 
 # Crear un rango continuo para los precios
-precio_unitario_range = np.linspace(min(df_ventas_grouped['Precio_unitario_promedio'].min(), 
-                                        df_inventario_grouped['f126_precio'].min(),
-                                        df_despacho_grouped['f126_precio'].min()), 
-                                    max(df_ventas_grouped['Precio_unitario_promedio'].max(), 
-                                        df_inventario_grouped['f126_precio'].max(),
-                                        df_despacho_grouped['f126_precio'].max()), 
+precio_unitario_range = np.linspace(min( max(df_ventas_grouped['Precio_unitario_promedio'].min(),
+                                             df_ventas_grouped['Precio_unitario_promedio'].quantile(0.25) - (1.5)*(df_ventas_grouped['Precio_unitario_promedio'].quantile(0.75) - df_ventas_grouped['Precio_unitario_promedio'].quantile(0.25))),
+                                         max(df_inventario_grouped['f126_precio'].min(),
+                                             df_inventario_grouped['f126_precio'].quantile(0.25) - (1.5)*(df_inventario_grouped['f126_precio'].quantile(0.75) - df_inventario_grouped['f126_precio'].quantile(0.25)))
+                                        ),
+                                    min( min(df_ventas_grouped['Precio_unitario_promedio'].max(),
+                                             df_ventas_grouped['Precio_unitario_promedio'].quantile(0.75) + (1.5)*(df_ventas_grouped['Precio_unitario_promedio'].quantile(0.75) - df_ventas_grouped['Precio_unitario_promedio'].quantile(0.25))),
+                                         min(df_inventario_grouped['f126_precio'].max(),
+                                             df_inventario_grouped['f126_precio'].quantile(0.75) + (1.5)*(df_inventario_grouped['f126_precio'].quantile(0.75) - df_inventario_grouped['f126_precio'].quantile(0.25)))
+                                        ),
                                     1000)
 
 # Ajustar la curva de densidad para las ventas
@@ -102,16 +114,20 @@ kde_despacho = gaussian_kde(df_despacho_grouped['f126_precio'], weights=df_despa
 density_despacho = kde_despacho(precio_unitario_range)
 
 # Crear los intervalos para df_inventario_grouped
-bins = pd.cut(df_inventario_grouped['f126_precio'], bins=10, right=False)
-df_inventario_grouped['Precio_Intervalo'] = bins.apply(lambda x: f"[{x.left:.1f}, {x.right:.1f})")
+bins = pd.cut(precio_unitario_range, bins=10, right=False)
 
+df_inventario_grouped['Precio_Intervalo'] = pd.cut(
+    df_inventario_grouped['f126_precio'], 
+    bins=bins.categories,  # Usar las categorías de los bins generados
+    right=False
+)
 # Aplicar los mismos intervalos a df_ventas_grouped
 df_ventas_grouped['Precio_Intervalo'] = pd.cut(df_ventas_grouped['Precio_unitario_promedio'], 
-                                               bins=bins.cat.categories, 
+                                               bins=bins.categories, 
                                                right=False)
 # Aplicar los mismos intervalos a df_ventas_grouped
 df_despacho_grouped['Precio_Intervalo'] = pd.cut(df_despacho_grouped['f126_precio'], 
-                                               bins=bins.cat.categories, 
+                                               bins=bins.categories, 
                                                right=False)
 # Agrupar por intervalos y sumar las ventas
 df_ventas_grouped_by_interval = df_ventas_grouped.groupby('Precio_Intervalo').agg(
@@ -214,7 +230,7 @@ probabilidades_filtered = probabilidades[(probabilidades['cmitems_MARCA'] == mar
                                 (probabilidades['almacen_descri'] == tienda)].copy()
 
 # Asignar los intervalos de precios a cada SKU en el DataFrame de probabilidades
-probabilidades_filtered['Precio_Intervalo'] = pd.cut(probabilidades_filtered['f126_precio'], bins=bins.cat.categories, right=False)
+probabilidades_filtered['Precio_Intervalo'] = pd.cut(probabilidades_filtered['f126_precio'], bins=bins.categories, right=False)
 
 # Convertir 'Precio_Intervalo' a str para asegurar la agrupación correcta
 #probabilidades_filtered['Precio_Intervalo'] = probabilidades_filtered['Precio_Intervalo'].astype(str)
