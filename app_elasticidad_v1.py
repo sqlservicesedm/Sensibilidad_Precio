@@ -17,7 +17,7 @@ df_formato = pd.read_csv('formato_para_elasticidad.csv')
 # Unir el archivo de formato con los demás
 df_ventas = pd.merge(df_ventas, df_formato, left_on='CO', right_on='CO', how='left')
 df_inventario = pd.merge(df_inventario, df_formato, left_on='CO', right_on='CO', how='left')
-df_despacho = pd.merge(df_despacho, df_formato, left_on='CodigoAlmacen', right_on='CO', how='left')
+df_despacho = pd.merge(df_despacho, df_formato, left_on='CodigoAlmacen', right_on='almacen_bodegaedm', how='left')
 
 # Título de la app
 st.title('Análisis de Elasticidad: Curvas de Densidad y Optimización de Inventario')
