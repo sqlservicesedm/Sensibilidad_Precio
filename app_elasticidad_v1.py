@@ -12,7 +12,7 @@ df_despacho = pd.read_csv('despacho_para_elasticidad.csv')
 df_recomendacion = pd.read_csv('recomendacion_rango_precios.csv')
 
 
-df_formato = pd.read_csv('formato_para_elasticidad.csv')
+df_formato = pd.read_csv('formato_para_elasticidad.csv', encoding='latin1')
 
 # Unir el archivo de formato con los demás
 df_ventas = pd.merge(df_ventas, df_formato, left_on='CO', right_on='CO', how='left')
