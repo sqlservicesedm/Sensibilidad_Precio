@@ -11,6 +11,14 @@ df_despacho = pd.read_csv('despacho_para_elasticidad.csv')
 
 df_recomendacion = pd.read_csv('recomendacion_rango_precios.csv')
 
+
+df_formato = pd.read_csv('formato_para_elasticidad.csv')
+
+# Unir el archivo de formato con los demás
+df_ventas = pd.merge(df_ventas, df_formato, left_on='CO', right_on='CO', how='left')
+df_inventario = pd.merge(df_inventario, df_formato, left_on='CO', right_on='CO', how='left')
+df_despacho = pd.merge(df_despacho, df_formato, left_on='CodigoAlmacen', right_on='CO', how='left')
+
 # Título de la app
 st.title('Análisis de Elasticidad: Curvas de Densidad y Optimización de Inventario')
 
@@ -23,6 +31,10 @@ tienda = st.selectbox('Selecciona la Tienda:', tienda_options)
 precios = np.array([50000,100000,150000,200000,250000,300000,350000,400000,450000,500000])
 excluir = st.selectbox('Selecciona el precio minimo:', precios)
 
+# Selector múltiple para Formato y Canal
+formato_seleccionado = st.multiselect('Selecciona el/los Formato(s):', df_formato['almacen_grupo_canal'].unique(), default=df_formato['almacen_grupo_canal'].unique())
+canal_seleccionado = st.multiselect('Selecciona el/los Canal(es):', df_formato['almacen_formato_crm'].unique(), default=df_formato['almacen_formato_crm'].unique())
+
 
 tiendas_excluidas = ['COBRO A TRANSPORTADORAS','MUESTRAS FISICAS PROVEEDORES SERVICIOS',
                      'NOVEDADES TIENDAS ONLINE','PILATOS ACCESORIOS SAN SILVIESTRE',
@@ -32,6 +44,11 @@ tiendas_excluidas = ['COBRO A TRANSPORTADORAS','MUESTRAS FISICAS PROVEEDORES SER
                      'NOVEDADES EN IMPORTACION','BODEGA DE SEGUNDAS OBSOLETAS',
                      'CONFE CONCILIACION','SEGUNDAS','MOVIL EVENTO 2','MERCANCIA CONSIGNACIÓN RECIBIDA']
 
+# Filtrar y agrupar los datos de ventas
+if formato_seleccionado:
+    df_ventas = df_ventas[df_ventas['almacen_grupo_canal'].isin(formato_seleccionado)]
+if canal_seleccionado:
+    df_ventas = df_ventas[df_ventas['almacen_formato_crm'].isin(canal_seleccionado)]
 
 # Filtrar y agrupar los datos de ventas
 if tienda == 'Todas las tiendas':
@@ -52,6 +69,12 @@ df_ventas_grouped = df_ventas_filtered.groupby('Precio_unitario_promedio').agg(
 ).reset_index()
 
 # Filtrar y agrupar los datos de inventario
+if formato_seleccionado:
+    df_inventario = df_inventario[df_inventario['almacen_grupo_canal'].isin(formato_seleccionado)]
+if canal_seleccionado:
+    df_inventario = df_inventario[df_inventario['almacen_formato_crm'].isin(canal_seleccionado)]
+
+# Filtrar y agrupar los datos de inventario
 if tienda == 'Todas las tiendas':
     df_inventario_filtered = df_inventario[(df_inventario['Marca'] == marca) & 
                                            (df_inventario['Genero'] == genero) & 
@@ -69,6 +92,12 @@ df_inventario_grouped = df_inventario_filtered.groupby('f126_precio').agg(
     Cantidad_Inventario=('Cantidad_Inventario', 'sum')
 ).reset_index()
 
+# Filtrar y agrupar los datos de despacho
+if formato_seleccionado:
+    df_despacho = df_despacho[df_despacho['almacen_grupo_canal'].isin(formato_seleccionado)]
+if canal_seleccionado:
+    df_despacho = df_despacho[df_despacho['almacen_formato_crm'].isin(canal_seleccionado)]
+    
 # Filtrar y agrupar los datos de despacho
 if tienda == 'Todas las tiendas':
     df_despacho_filtered = df_despacho[(df_despacho['Marca'] == marca) & 
