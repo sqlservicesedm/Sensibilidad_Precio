@@ -97,7 +97,7 @@ if formato_seleccionado:
     df_despacho = df_despacho[df_despacho['almacen_grupo_canal'].isin(formato_seleccionado)]
 if canal_seleccionado:
     df_despacho = df_despacho[df_despacho['almacen_formato_crm'].isin(canal_seleccionado)]
-    
+
 # Filtrar y agrupar los datos de despacho
 if tienda == 'Todas las tiendas':
     df_despacho_filtered = df_despacho[(df_despacho['Marca'] == marca) & 
