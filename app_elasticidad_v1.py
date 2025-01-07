@@ -30,6 +30,11 @@ tienda_options = np.append(df_ventas['Tienda'].unique(), 'Todas las tiendas')
 tienda = st.selectbox('Selecciona la Tienda:', tienda_options)
 precios = np.array([50000,100000,150000,200000,250000,300000,350000,400000,450000,500000])
 excluir = st.selectbox('Selecciona el precio minimo:', precios)
+precios_maximo = np.array([2000000,3000000,4000000,5000000])
+excluir_maximo = st.selectbox('Selecciona el precio maximo:', precios_maximo)
+
+numero_rangos = np.array([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20])
+numero_bin = st.selectbox('Selecciona el numero de intervalos:', numero_rangos)
 
 # Selector múltiple para Formato y Canal
 formato_seleccionado = st.multiselect('Selecciona el/los Formato(s):', df_formato['almacen_grupo_canal'].unique(), default=df_formato['almacen_grupo_canal'].unique())
@@ -56,13 +61,15 @@ if tienda == 'Todas las tiendas':
                                     (df_ventas['Genero'] == genero) & 
                                     (df_ventas['Tipo'] == tipo) & 
                                     (~df_ventas['Tienda'].isin(tiendas_excluidas))&
-                                    (df_ventas['Precio_unitario_promedio']>=excluir)]
+                                    (df_ventas['Precio_unitario_promedio']>=excluir)& 
+                                    (df_ventas['Precio_unitario_promedio']<=excluir_maximo)]
 else:
     df_ventas_filtered = df_ventas[(df_ventas['Marca'] == marca) & 
                                     (df_ventas['Genero'] == genero) & 
                                     (df_ventas['Tipo'] == tipo) & 
                                     (df_ventas['Tienda'] == tienda) &
-                                    (df_ventas['Precio_unitario_promedio']>=excluir)]
+                                    (df_ventas['Precio_unitario_promedio']>=excluir)&
+                                    (df_ventas['Precio_unitario_promedio']<=excluir_maximo)]
 
 df_ventas_grouped = df_ventas_filtered.groupby('Precio_unitario_promedio').agg(
     Cantidad_Ventas=('Cantidad', 'sum')
@@ -80,13 +87,15 @@ if tienda == 'Todas las tiendas':
                                            (df_inventario['Genero'] == genero) & 
                                            (df_inventario['Tipo'] == tipo) &
                                            (~df_inventario['Descripcion_bodega'].isin(tiendas_excluidas)) &
-                                           (df_inventario['f126_precio']>=excluir)]
+                                           (df_inventario['f126_precio']>=excluir)&
+                                           (df_inventario['f126_precio']<=excluir_maximo)]
 else:
     df_inventario_filtered = df_inventario[(df_inventario['Marca'] == marca) & 
                                            (df_inventario['Genero'] == genero) & 
                                            (df_inventario['Tipo'] == tipo) & 
                                            (df_inventario['Descripcion_bodega'] == tienda) &
-                                           (df_inventario['f126_precio']>=excluir)]
+                                           (df_inventario['f126_precio']>=excluir)&
+                                           (df_inventario['f126_precio']<=excluir_maximo)]
 
 df_inventario_grouped = df_inventario_filtered.groupby('f126_precio').agg(
     Cantidad_Inventario=('Cantidad_Inventario', 'sum')
@@ -104,13 +113,15 @@ if tienda == 'Todas las tiendas':
                                        (df_despacho['Genero'] == genero) & 
                                        (df_despacho['Tipo'] == tipo)&
                                        (~df_despacho['nombrealmacen'].isin(tiendas_excluidas)) &
-                                       (df_despacho['f126_precio']>=excluir)]
+                                       (df_despacho['f126_precio']>=excluir)&
+                                       (df_despacho['f126_precio']<=excluir_maximo)]
 else:
     df_despacho_filtered = df_despacho[(df_despacho['Marca'] == marca) & 
                                        (df_despacho['Genero'] == genero) & 
                                        (df_despacho['Tipo'] == tipo) & 
                                        (df_despacho['nombrealmacen'] == tienda) &
-                                       (df_despacho['f126_precio']>=excluir)]
+                                       (df_despacho['f126_precio']>=excluir)&
+                                       (df_despacho['f126_precio']<=excluir_maximo)]
 
 df_despacho_grouped = df_despacho_filtered.groupby('f126_precio').agg(
     Cantidad_Despacho=('Despacho', 'sum')
@@ -143,7 +154,7 @@ kde_despacho = gaussian_kde(df_despacho_grouped['f126_precio'], weights=df_despa
 density_despacho = kde_despacho(precio_unitario_range)
 
 # Crear los intervalos para df_inventario_grouped
-bins = pd.cut(precio_unitario_range, bins=10, right=False)
+bins = pd.cut(precio_unitario_range, bins=numero_bin, right=False)
 
 df_inventario_grouped['Precio_Intervalo'] = pd.cut(
     df_inventario_grouped['f126_precio'], 
