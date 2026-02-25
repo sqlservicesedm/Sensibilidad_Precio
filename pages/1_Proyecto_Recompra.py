@@ -338,15 +338,27 @@ tabla_calzado.columns = ['Rango Calzado', 'Casos', 'Share Mediano', 'Recompra Me
 formato_calzado = {'Share Mediano': "{:.1%}", 'Recompra Mediana': "{:.2%}", 'Prob. Éxito (%)': "{:.1f}%", 'Ticket Mediano': "${:,.0f}"}
 st.dataframe(tabla_calzado.style.format(formato_calzado), use_container_width=True)
 
-
 st.markdown("<br><hr><br>", unsafe_allow_html=True)
+
 # =============================================================================
 # 4.4 MAPA DE OPORTUNIDAD GEOGRÁFICA (ESTÁTICO - VISTA NACIONAL)
 # =============================================================================
 st.subheader("Mapa de Oportunidad Geográfica (Nacional)")
 st.markdown("💡 *Este mapa mantiene la vista global de todas las ciudades para identificar plazas clave, independientemente de los filtros aplicados arriba.*")
 
-# Usamos 'df' (dataset global) en lugar de 'df_filt' para congelar la visual
+# --- PARCHE PARA SALVAR adjustText EN STREAMLIT ---
+import numpy as np
+if not hasattr(np, 'Inf'):
+    np.Inf = np.inf
+# --------------------------------------------------
+
+try:
+    from adjustText import adjust_text
+    HAS_ADJUST_TEXT = True
+except ImportError:
+    HAS_ADJUST_TEXT = False
+
+# Usamos 'df' (dataset global) para congelar la visual
 resumen_scatter = df.groupby('Ciudad', observed=False).agg(
     Volumen_Casos=('Target_Tasa_Recompra', 'count'),
     Tasa_Recompra=('Target_Tasa_Recompra', 'median'),
@@ -354,11 +366,8 @@ resumen_scatter = df.groupby('Ciudad', observed=False).agg(
     Ticket_Promedio=('Ticket_Promedio_3M', 'median')
 ).reset_index()
 
-# Filtro para evitar ruido
+# Filtro mínimo para evitar ruido en el gráfico
 data_scatter = resumen_scatter[resumen_scatter['Volumen_Casos'] > 20].copy()
-
-# Ordenamos por volumen para que el zig-zag se aplique de izquierda a derecha
-data_scatter = data_scatter.sort_values('Volumen_Casos').reset_index(drop=True)
 
 if len(data_scatter) > 1:
     sns.set_theme(style="whitegrid")
@@ -379,30 +388,24 @@ if len(data_scatter) > 1:
         ax=ax_scatter
     )
 
-    # Ajuste del Eje X a Logarítmico (siempre, porque es vista nacional)
+    # Ajuste del Eje X a Logarítmico
     ax_scatter.set_xscale('log')
     x_min = data_scatter['Volumen_Casos'].min() * 0.8
     x_max = data_scatter['Volumen_Casos'].max() * 1.2
     ax_scatter.set_xlim(x_min, x_max) 
 
-    # Etiquetado nativo con efecto Zig-Zag
+    # Etiquetado usando adjustText
+    texts = []
     for i in range(data_scatter.shape[0]):
         row = data_scatter.iloc[i]
-        
-        # Etiquetamos solo las ciudades con volumen o tasas atípicas
+        # Mantenemos tu regla de etiquetar solo las más relevantes en el gráfico para no saturarlo
         if row['Volumen_Casos'] > 100 or row['Tasa_Recompra'] > 0.13 or row['Tasa_Recompra'] < 0.08:
             label = f"{row['Ciudad']}\n({row['Tasa_Recompra']*100:.1f}%)"
-            
-            # Zig-Zag
-            if i % 2 == 0:
-                offset_y = 0.002
-                va_pos = 'bottom'
-            else:
-                offset_y = -0.002
-                va_pos = 'top'
+            texts.append(ax_scatter.text(row['Volumen_Casos'], row['Tasa_Recompra'], label, 
+                                         fontsize=9, fontweight='bold', color='#2C3E50'))
 
-            ax_scatter.text(row['Volumen_Casos'], row['Tasa_Recompra'] + offset_y, label, 
-                            fontsize=9, fontweight='bold', color='#2C3E50', ha='center', va=va_pos)
+    if HAS_ADJUST_TEXT:
+        adjust_text(texts, ax=ax_scatter, arrowprops=dict(arrowstyle='-', color='gray', lw=0.8))
 
     sns.regplot(data=data_scatter, x='Volumen_Casos', y='Tasa_Recompra', 
                 scatter=False, color='#95a5a6', line_kws={'linestyle':'--', 'linewidth':1.5}, ax=ax_scatter)
@@ -420,14 +423,18 @@ if len(data_scatter) > 1:
     plt.tight_layout()
     st.pyplot(fig_scatter)
 
-    # Tabla de Joyas Ocultas (También estática)
-    st.markdown("**--- LAS JOYAS OCULTAS (Alta Lealtad en Ciudades Medianas) ---**")
-    joyas = data_scatter[(data_scatter['Tasa_Recompra'] > 0.12) & (data_scatter['Volumen_Casos'] < 1000)]
+    # ==========================================
+    # TABLA COMPLETA CON SCROLL
+    # ==========================================
+    st.markdown("**--- DETALLE POR CIUDAD (VISTA NACIONAL COMPLETA) ---**")
     
-    if not joyas.empty:
-        joyas_print = joyas.sort_values('Tasa_Recompra', ascending=False)[['Ciudad', 'Tasa_Recompra', 'Volumen_Casos']]
-        joyas_print.columns = ['Ciudad', 'Tasa Recompra Mediana', 'Volumen Casos']
-        # Ajuste moderno recomendado por Streamlit usando width en lugar de use_container_width
-        st.dataframe(joyas_print.style.format({'Tasa Recompra Mediana': "{:.2%}"}), width=600)
-    else:
-        st.info("No hay joyas ocultas bajo estos parámetros.")
+    # Tomamos todas las ciudades graficadas y las ordenamos
+    tabla_ciudades = data_scatter.sort_values('Tasa_Recompra', ascending=False)[['Ciudad', 'Tasa_Recompra', 'Volumen_Casos', 'Ticket_Promedio']]
+    tabla_ciudades.columns = ['Ciudad', 'Tasa Recompra Mediana', 'Volumen Casos', 'Ticket Promedio']
+    
+    # Imprimimos la tabla dándole una altura fija para forzar el scroll
+    st.dataframe(
+        tabla_ciudades.style.format({'Tasa Recompra Mediana': "{:.2%}", 'Ticket Promedio': "${:,.0f}"}), 
+        height=350, 
+        width=800
+    )
