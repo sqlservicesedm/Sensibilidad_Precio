@@ -438,3 +438,109 @@ if len(data_scatter) > 1:
         height=350, 
         width=800
     )
+st.markdown("<br><hr><br>", unsafe_allow_html=True)
+
+# =============================================================================
+# 4.5 EFECTO MONOPOLIO (CANTIDAD DE TIENDAS VS LEALTAD - ESTÁTICO)
+# =============================================================================
+st.subheader("Efecto Monopolio: Cantidad de Tiendas vs. Lealtad")
+st.markdown("💡 *Vista estática nacional: ¿Tener una sola tienda exclusiva en una ciudad genera más retención que tener múltiples opciones?*")
+
+# 1. AGRUPACIÓN INTELIGENTE (Usando el 'df' global, no el filtrado)
+resumen_ciudad_mono = df.groupby('Ciudad', observed=False).agg(
+    Volumen_Casos=('Target_Tasa_Recompra', 'count'),
+    Num_Tiendas=('Tienda', 'nunique'), 
+    Tasa_Recompra=('Target_Tasa_Recompra', 'median'),
+    Prob_Exito_Elite=('Es_Elite', 'mean'),
+    Ticket_Promedio=('Ticket_Promedio_3M', 'median')
+).reset_index()
+
+# Filtro de ruido
+data_mono = resumen_ciudad_mono[resumen_ciudad_mono['Volumen_Casos'] > 20].copy()
+
+if len(data_mono) > 1:
+    # 2. VISUALIZACIÓN
+    sns.set_theme(style="whitegrid")
+    fig_mono, ax_mono = plt.subplots(figsize=(14, 9))
+
+    # Scatter plot con la leyenda activada para poder extraerla después
+    sns.scatterplot(
+        data=data_mono, 
+        x='Volumen_Casos', 
+        y='Tasa_Recompra', 
+        size='Num_Tiendas',       
+        sizes=(100, 1000),        
+        alpha=0.7,
+        hue='Num_Tiendas',        
+        palette='viridis_r',      
+        edgecolor='black',
+        linewidth=1,
+        legend='brief',
+        ax=ax_mono
+    )
+
+    ax_mono.set_xscale('log')
+    x_min_mono = data_mono['Volumen_Casos'].min() * 0.8
+    x_max_mono = data_mono['Volumen_Casos'].max() * 1.2
+    ax_mono.set_xlim(x_min_mono, x_max_mono)
+
+    # 3. ETIQUETADO ESTRATÉGICO
+    texts_mono = []
+    for i in range(data_mono.shape[0]):
+        row = data_mono.iloc[i]
+        
+        is_metro = row['Num_Tiendas'] >= 3
+        is_single_jewel = (row['Num_Tiendas'] == 1) and (row['Tasa_Recompra'] > 0.14)
+        
+        if is_metro or is_single_jewel:
+            label = f"{row['Ciudad']}\n({row['Num_Tiendas']} Tdas | {row['Tasa_Recompra']*100:.1f}%)"
+            texts_mono.append(ax_mono.text(
+                row['Volumen_Casos'], 
+                row['Tasa_Recompra'], 
+                label, 
+                fontsize=9, 
+                fontweight='bold', 
+                color='#2C3E50'
+            ))
+
+    if HAS_ADJUST_TEXT:
+        adjust_text(texts_mono, ax=ax_mono, arrowprops=dict(arrowstyle='-', color='gray', lw=0.5))
+
+    max_recompra_mono = data_mono['Tasa_Recompra'].max()
+    if max_recompra_mono > 0:
+        ax_mono.set_ylim(0, max_recompra_mono * 1.15) 
+
+    ax_mono.set_title('Efecto de la Exclusividad (Cantidad de Tiendas por Plaza)', fontsize=16, fontweight='bold', pad=20)
+    ax_mono.set_xlabel('Volumen de Operación (Escala Log)', fontsize=12)
+    ax_mono.set_ylabel('Tasa de Recompra Mediana (%)', fontsize=12)
+    ax_mono.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1, decimals=0))
+
+    # Ajuste seguro de la leyenda
+    handles, labels = ax_mono.get_legend_handles_labels()
+    if handles:
+        ax_mono.legend(handles, labels, title="Cant. Tiendas", loc='upper right', frameon=True)
+
+    sns.despine(trim=True)
+    plt.tight_layout()
+    st.pyplot(fig_mono)
+
+    # 4. TABLA COMPARATIVA
+    st.markdown("**--- COMPARATIVO ESTRATÉGICO: TIENDA ÚNICA VS MULTI-TIENDA ---**")
+    
+    data_mono['Tipo_Plaza'] = np.where(data_mono['Num_Tiendas'] == 1, 'Plaza Única (1 Tienda)', 'Plaza Múltiple (>1 Tienda)')
+    comparativo = data_mono.groupby('Tipo_Plaza', observed=False).agg(
+        Ciudades=('Ciudad', 'count'),
+        Recompra_Promedio=('Tasa_Recompra', 'mean'), 
+        Ticket_Promedio=('Ticket_Promedio', 'mean')
+    ).reset_index()
+
+    comparativo.columns = ['Tipo de Plaza', 'Cantidad de Ciudades', 'Recompra Promedio', 'Ticket Promedio']
+    
+    formato_comparativo = {
+        'Recompra Promedio': "{:.2%}",
+        'Ticket Promedio': "${:,.0f}"
+    }
+    st.dataframe(comparativo.style.format(formato_comparativo), width=700)
+
+else:
+    st.warning("Datos insuficientes para renderizar el Efecto Monopolio.")
