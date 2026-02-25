@@ -541,14 +541,14 @@ if len(data_mono) > 1:
     # 4. TABLA COMPARATIVA
     #st.markdown("**--- COMPARATIVO ESTRATÉGICO: TIENDA ÚNICA VS MULTI-TIENDA ---**")
     
-    data_mono['Tipo_Plaza'] = np.where(data_mono['Num_Tiendas'] == 1, 'Plaza Única (1 Tienda)', 'Plaza Múltiple (>1 Tienda)')
-    comparativo = data_mono.groupby('Tipo_Plaza', observed=False).agg(
+    data_mono['Tiendas'] = np.where(data_mono['Num_Tiendas'] == 1, 'Única tienda (1 Tienda)', 'Múltiples tiendas (>1 Tienda)')
+    comparativo = data_mono.groupby('Tiendas', observed=False).agg(
         Ciudades=('Ciudad', 'count'),
         Recompra_Promedio=('Tasa_Recompra', 'mean'), 
         Ticket_Promedio=('Ticket_Promedio', 'mean')
     ).reset_index()
 
-    comparativo.columns = ['Tipo de Plaza', 'Cantidad de Ciudades', 'Recompra Promedio', 'Ticket Promedio']
+    comparativo.columns = ['Tiendas', 'Cantidad de Ciudades', 'Recompra Promedio', 'Ticket Promedio']
     
     formato_comparativo = {
         'Recompra Promedio': "{:.2%}",
@@ -557,7 +557,7 @@ if len(data_mono) > 1:
     st.dataframe(comparativo.style.format(formato_comparativo), width=700)
 
 else:
-    st.warning("Datos insuficientes para renderizar el Efecto Monopolio.")
+    st.warning("Datos insuficientes para renderizar.")
 st.markdown("<br><hr><br>", unsafe_allow_html=True)
 
 # ------------------------------------------
@@ -620,3 +620,4 @@ formato_desc = {
     'Ticket Mediano': "${:,.0f}"
 }
 st.dataframe(tabla_desc.style.format(formato_desc), width=800)
+
