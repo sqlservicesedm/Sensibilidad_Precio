@@ -130,20 +130,22 @@ def load_data():
         bins=bins_calzado, 
         labels=labels_calzado
     )
-    # Bins Globales: Descuento
-    bins_desc = [-0.01, 0.05, 0.15, 0.25, 0.40, 1.01]
+    # Bins Globales: Descuento (Actualizado)
+    bins_desc = [-0.01, 0.05, 0.15, 0.25, 0.40, 1.0]
     labels_desc = [
-        'Full Price\n(<5%)',
-        'Promo Táctica\n(5-15%)',
-        'Promo Estructural\n(15-25%)',
-        'Liquidación\n(25-40%)',
-        'Remate\n(>40%)'
+        '1. Full Price (<5%)', 
+        '2. Promo Táctica (5-15%)', 
+        '3. Promo Estructural (15-25%)', 
+        '4. Liquidación (25-40%)', 
+        '5. Remate (>40%)'
     ]
     df['Rango_Descuento'] = pd.cut(
         df['Porcentaje_Descuento_3M'], 
         bins=bins_desc, 
         labels=labels_desc
     )
+    # Definimos Éxito específico para este análisis (>15%)
+    df['Es_Mes_Exitoso'] = df['Target_Tasa_Recompra'] > 0.15
     
     # Limpieza de nulos para filtros
     for col in ['Formato', 'Jefe_Zona', 'Ciudad', 'Tienda']:
@@ -561,63 +563,60 @@ else:
 st.markdown("<br><hr><br>", unsafe_allow_html=True)
 
 # ------------------------------------------
-# 4.6 ESTRATEGIA DE DESCUENTO (DINÁMICO)
+# 4.6 ESTRATEGIA DE PRECIO (VISTA OBJETIVA)
 # ------------------------------------------
-st.subheader("Estrategia de Descuento")
+st.subheader("Estrategia de Precio: % Descuento")
 
 # Filtrar datos de la selección actual
 df_clean_desc = df_filt[(df_filt['Porcentaje_Descuento_3M'] >= 0) & 
                         (df_filt['Porcentaje_Descuento_3M'] <= 1)].copy()
 
+# Tabla Matemática (Basada en Promedios/Mean según tu nuevo código)
 resumen_desc = df_clean_desc.groupby('Rango_Descuento', observed=False).agg(
-    Casos=('Target_Tasa_Recompra', 'count'),
-    Descuento_Mediano=('Porcentaje_Descuento_3M', 'median'),
-    Recompra_Mediana=('Target_Tasa_Recompra', 'median'),
-    Prob_Exito_Elite=('Es_Elite', 'mean'),
-    Ticket_Mediano=('Ticket_Promedio_3M', 'median')
+    Volumen_Casos=('Target_Tasa_Recompra', 'count'),
+    Descuento_Promedio=('Porcentaje_Descuento_3M', 'mean'),
+    Tasa_Recompra=('Target_Tasa_Recompra', 'mean'),
+    Probabilidad_Exito=('Es_Mes_Exitoso', 'mean'),
+    Ticket_Promedio=('Ticket_Promedio_3M', 'mean')
 ).reset_index()
 
-resumen_desc['Prob_Exito_Elite_Pct'] = (resumen_desc['Prob_Exito_Elite'] * 100).round(1)
-resumen_desc['Recompra_Mediana'] = resumen_desc['Recompra_Mediana'].fillna(0)
+resumen_desc['Tasa_Recompra'] = resumen_desc['Tasa_Recompra'].fillna(0)
 
-sns.set_theme(style="whitegrid")
-fig_desc, ax_desc = plt.subplots(figsize=(12, 7))
-color_chart = '#922B21'
+# Visualización (Tu código exacto)
+plt.figure(figsize=(11, 6))
+fig_desc, ax_desc = plt.subplots(figsize=(11, 6))
 
-# Tu lineplot exacto
-sns.lineplot(data=resumen_desc, x='Rango_Descuento', y='Recompra_Mediana', 
-             marker='s', markersize=12, linewidth=3, color=color_chart, sort=False, ax=ax_desc)
+sns.lineplot(data=resumen_desc, x='Rango_Descuento', y='Tasa_Recompra', 
+             marker='o', markersize=10, linewidth=3, color='#c0392b', sort=False, ax=ax_desc)
 
-for x, y in zip(range(len(resumen_desc)), resumen_desc['Recompra_Mediana']):
-    if resumen_desc.loc[x, 'Casos'] > 0:
-        label_text = f'{y*100:.1f}%'
-        ax_desc.text(x, y + 0.0008, label_text, 
-                 ha='center', va='bottom', 
-                 fontweight='bold', fontsize=12, color=color_chart)
+# Etiquetas de datos
+for x, y in zip(range(len(resumen_desc)), resumen_desc['Tasa_Recompra']):
+    if resumen_desc.loc[x, 'Volumen_Casos'] > 0:
+        ax_desc.text(x, y + 0.0005, f'{y*100:.1f}%', ha='center', va='bottom', fontweight='bold', fontsize=12)
 
-ax_desc.set_title('¿El Descuento "Compra" Lealtad? Impacto de la Promo en Recompra', fontsize=16, fontweight='bold', pad=20, color='#17202A')
-ax_desc.set_ylabel('Tasa de Recompra (Mediana)', fontsize=13)
-ax_desc.set_xlabel('Nivel de Agresividad Comercial (% Descuento)', fontsize=13)
+ax_desc.set_title('El Costo de la Lealtad: ¿El descuento fideliza?', fontsize=14, fontweight='bold')
+ax_desc.set_ylabel('Tasa de Recompra (3 Meses)', fontsize=12)
+ax_desc.set_xlabel('Nivel de Agresividad Promocional (Descuento Medio)', fontsize=12)
+ax_desc.grid(True, linestyle='--', alpha=0.5)
 
-ax_desc.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1, decimals=0))
-y_min = resumen_desc['Recompra_Mediana'].min()
-y_max = resumen_desc['Recompra_Mediana'].max()
+# Límites dinámicos basados en tu código
+y_min_desc = resumen_desc['Tasa_Recompra'].min()
+y_max_desc = resumen_desc['Tasa_Recompra'].max()
+if y_max_desc > 0:
+    ax_desc.set_ylim(y_min_desc * 0.95, y_max_desc * 1.05)
 
-if y_max > 0:
-    ax_desc.set_ylim(y_min * 0.9, y_max * 1.2) 
-
-sns.despine(left=True, bottom=True)
 plt.tight_layout()
 st.pyplot(fig_desc)
 
-# Tabla Maestra de Descuento
-tabla_desc = resumen_desc[['Rango_Descuento', 'Casos', 'Descuento_Mediano', 'Recompra_Mediana', 'Prob_Exito_Elite_Pct', 'Ticket_Mediano']].copy()
-tabla_desc.columns = ['Rango Descuento', 'Casos', 'Descuento Mediano', 'Recompra Mediana', 'Prob. Éxito (%)', 'Ticket Mediano']
-formato_desc = {
-    'Descuento Mediano': "{:.1%}", 
-    'Recompra Mediana': "{:.2%}", 
-    'Prob. Éxito (%)': "{:.1f}%", 
-    'Ticket Mediano': "${:,.0f}"
-}
-st.dataframe(tabla_desc.style.format(formato_desc), width=800)
+# Tabla de Resumen Matemático
+st.markdown("**--- RESUMEN MATEMÁTICO: DESCUENTOS VS LEALTAD ---**")
+tabla_desc_final = resumen_desc[['Rango_Descuento', 'Volumen_Casos', 'Tasa_Recompra', 'Probabilidad_Exito', 'Ticket_Promedio']].copy()
+tabla_desc_final.columns = ['Rango Descuento', 'Casos', 'Recompra Promedio', 'Prob. Éxito (>15%)', 'Ticket Promedio']
 
+formato_desc_final = {
+    'Recompra Promedio': "{:.2%}", 
+    'Prob. Éxito (>15%)': "{:.1%}", 
+    'Ticket Promedio': "${:,.0f}"
+}
+
+st.dataframe(tabla_desc_final.style.format(formato_desc_final), width=800)
