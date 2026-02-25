@@ -376,7 +376,7 @@ else:
     if len(data_scatter) > 1:
         try:
             from adjustText import adjust_text
-            HAS_ADJUST_TEXT = True
+            HAS_ADJUST_TEXT = False
         except ImportError:
             HAS_ADJUST_TEXT = False
         
@@ -452,3 +452,4 @@ else:
 
     else:
         st.warning("No hay suficientes datos comparables para trazar el mapa de dispersión con estos filtros.")
+
