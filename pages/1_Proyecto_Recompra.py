@@ -116,6 +116,21 @@ def load_data():
         labels=labels_upt
     )
     
+    # Bins Globales: Calzado
+    bins_calzado = [-0.01, 0.15, 0.30, 0.45, 0.75, 1.01]
+    labels_calzado = [
+        'Marginal\n(<15%)',
+        'Complementario\n(15-30%)',
+        'Core\n(30-45%)',
+        'Dominante\n(45-75%)',
+        'Especialista\n(>75%)'
+    ]
+    df['Rango_Calzado'] = pd.cut(
+        df['Share_Calzado_3M'], 
+        bins=bins_calzado, 
+        labels=labels_calzado
+    )
+    
     # Limpieza de nulos para filtros
     for col in ['Formato', 'Jefe_Zona', 'Ciudad', 'Tienda']:
         if col in df.columns:
@@ -255,3 +270,70 @@ tabla_upt = resumen_upt[['Rango_UPT', 'Casos', 'UPT_Mediano', 'Recompra_Mediana'
 tabla_upt.columns = ['Rango UPT', 'Casos', 'UPT Mediano', 'Recompra Mediana', 'Prob. Éxito (%)', 'Ticket Mediano']
 formato_upt = {'UPT Mediano': "{:.2f}", 'Recompra Mediana': "{:.2%}", 'Prob. Éxito (%)': "{:.1f}%", 'Ticket Mediano': "${:,.0f}"}
 st.dataframe(tabla_upt.style.format(formato_upt), use_container_width=True)
+
+st.markdown("<br><hr><br>", unsafe_allow_html=True)
+
+# ------------------------------------------
+# 4.3 SHARE DE CALZADO
+# ------------------------------------------
+st.subheader("Mix de Producto: Calzado")
+
+# Filtrar datos de la selección actual
+df_clean_calzado = df_filt[(df_filt['Share_Calzado_3M'] >= 0) & 
+                           (df_filt['Share_Calzado_3M'] <= 1)].copy()
+
+resumen_calzado = df_clean_calzado.groupby('Rango_Calzado', observed=False).agg(
+    Casos=('Target_Tasa_Recompra', 'count'),
+    Share_Mediano=('Share_Calzado_3M', 'median'),
+    Recompra_Mediana=('Target_Tasa_Recompra', 'median'),
+    Prob_Exito_Elite=('Es_Elite', 'mean'),
+    Ticket_Mediano=('Ticket_Promedio_3M', 'median')
+).reset_index()
+
+resumen_calzado['Prob_Exito_Elite_Pct'] = (resumen_calzado['Prob_Exito_Elite'] * 100).round(1)
+resumen_calzado['Recompra_Mediana'] = resumen_calzado['Recompra_Mediana'].fillna(0)
+
+sns.set_theme(style="whitegrid")
+fig_calzado, ax_calzado = plt.subplots(figsize=(12, 7))
+
+color_chart = '#D35400' 
+
+sns.lineplot(data=resumen_calzado, x='Rango_Calzado', y='Recompra_Mediana', 
+             marker='o', markersize=12, linewidth=3, color=color_chart, sort=False, ax=ax_calzado)
+
+for x, y in zip(range(len(resumen_calzado)), resumen_calzado['Recompra_Mediana']):
+    if resumen_calzado.loc[x, 'Casos'] > 0: # Solo si hay datos en ese bin
+        label_text = f'{y*100:.1f}%'
+        offset = 0.0008
+        va_pos = 'bottom'
+        
+        if y > 0.13: 
+            offset = -0.0015
+            va_pos = 'top'
+
+        ax_calzado.text(x, y + offset, label_text, 
+                 ha='center', va=va_pos, 
+                 fontweight='bold', fontsize=12, color=color_chart)
+
+ax_calzado.set_title('¿El Cliente de Calzado es más Fiel? (Impacto del Mix en Recompra)', fontsize=16, fontweight='bold', pad=20, color='#17202A')
+ax_calzado.set_ylabel('Tasa de Recompra (Mediana)', fontsize=13)
+ax_calzado.set_xlabel('Participación de Calzado en la Venta', fontsize=13)
+
+ax_calzado.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1, decimals=0))
+y_min = resumen_calzado['Recompra_Mediana'].min()
+y_max = resumen_calzado['Recompra_Mediana'].max()
+
+if y_max > 0:
+    ax_calzado.set_ylim(y_min * 0.95, y_max * 1.15) 
+
+sns.despine(left=True, bottom=True)
+plt.tight_layout()
+
+# Renderizar en Streamlit
+st.pyplot(fig_calzado)
+
+# Mostrar Tabla
+tabla_calzado = resumen_calzado[['Rango_Calzado', 'Casos', 'Share_Mediano', 'Recompra_Mediana', 'Prob_Exito_Elite_Pct', 'Ticket_Mediano']].copy()
+tabla_calzado.columns = ['Rango Calzado', 'Casos', 'Share Mediano', 'Recompra Mediana', 'Prob. Éxito (%)', 'Ticket Mediano']
+formato_calzado = {'Share Mediano': "{:.1%}", 'Recompra Mediana': "{:.2%}", 'Prob. Éxito (%)': "{:.1f}%", 'Ticket Mediano': "${:,.0f}"}
+st.dataframe(tabla_calzado.style.format(formato_calzado), use_container_width=True)
