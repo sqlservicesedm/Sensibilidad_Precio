@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import matplotlib.ticker as mtick
 import joblib
 
 st.set_page_config(page_title="Proyecto Recompra", layout="wide")
@@ -81,12 +82,13 @@ st.markdown("---")
 def load_data():
     df = pd.read_csv("data/datos_recompra.csv")
     
-    # 1. Definimos la Meta Objetiva y las categorías globalmente para fijar el eje X
+    # Meta Objetiva
     META_OBJETIVA = 0.137
     df['Es_Elite'] = df['Target_Tasa_Recompra'] >= META_OBJETIVA
     
-    bins_final = [0, 12, 24, 48, 96, 240]
-    labels_final = [
+    # Bins Globales: Experiencia
+    bins_exp = [0, 12, 24, 48, 96, 240]
+    labels_exp = [
         '1. Nuevos (<1 Año)',
         '2. En Consolidación (1-2 Años)',
         '3. Estables (2-4 Años)',
@@ -95,10 +97,26 @@ def load_data():
     ]
     df['Rango_Experiencia'] = pd.cut(
         df['Antiguedad_Promedio_Ponderada_3M'], 
-        bins=bins_final, 
-        labels=labels_final
+        bins=bins_exp, 
+        labels=labels_exp
+    )
+
+    # Bins Globales: UPT
+    bins_upt = [0, 1.45, 1.60, 1.80, 2.00, 10]
+    labels_upt = [
+        'Básico\n(<1.45 Uds)',
+        'Transición\n(1.45-1.60)',
+        'Estándar\n(1.60-1.80)',
+        'Venta Cruzada\n(1.80-2.0)',
+        'Outfit Completo\n(>2.0 Uds)'
+    ]
+    df['Rango_UPT'] = pd.cut(
+        df['UPT_3M'], 
+        bins=bins_upt, 
+        labels=labels_upt
     )
     
+    # Limpieza de nulos para filtros
     for col in ['Formato', 'Jefe_Zona', 'Ciudad', 'Tienda']:
         if col in df.columns:
             df[col] = df[col].fillna("Sin Asignar")
@@ -141,17 +159,18 @@ elif n_registros < 30:
     st.sidebar.warning(f"⚠️ Selección con muestra baja ({n_registros} registros). Interpretar promedios con precaución.")
 
 # ==========================================
-# SECCIÓN 4: ANÁLISIS DINÁMICO (TU CÓDIGO EXACTO DE EXPERIENCIA)
+# SECCIÓN 4: ANÁLISIS DINÁMICO
 # ==========================================
 
+# ------------------------------------------
+# 4.1 EXPERIENCIA DEL STAFF
+# ------------------------------------------
 st.subheader("Experiencia del Staff")
 
-# Limpieza y preparación sobre la data filtrada (df_filt en vez de df)
-df_clean = df_filt[(df_filt['Antiguedad_Promedio_Ponderada_3M'] >= 0) & 
-                   (df_filt['Antiguedad_Promedio_Ponderada_3M'] <= 240)].copy()
+df_clean_exp = df_filt[(df_filt['Antiguedad_Promedio_Ponderada_3M'] >= 0) & 
+                       (df_filt['Antiguedad_Promedio_Ponderada_3M'] <= 240)].copy()
 
-# Tabla Maestra de Staff
-resumen_staff = df_clean.groupby('Rango_Experiencia', observed=False).agg(
+resumen_staff = df_clean_exp.groupby('Rango_Experiencia', observed=False).agg(
     Casos=('Target_Tasa_Recompra', 'count'),
     Seniority_Mediano_Meses=('Antiguedad_Promedio_Ponderada_3M', 'median'),
     Recompra_Mediana=('Target_Tasa_Recompra', 'median'),
@@ -162,7 +181,6 @@ resumen_staff = df_clean.groupby('Rango_Experiencia', observed=False).agg(
 resumen_staff['Prob_Exito_Elite'] = (resumen_staff['Prob_Exito_Elite'] * 100).round(1)
 resumen_staff['Recompra_Mediana'] = resumen_staff['Recompra_Mediana'].fillna(0) 
 
-# Visualización
 fig_staff, ax_staff = plt.subplots(figsize=(12, 6))
 sns.lineplot(data=resumen_staff, x='Rango_Experiencia', y='Recompra_Mediana', 
              marker='s', markersize=12, linewidth=4, color='#1b4f72', sort=False, ax=ax_staff)
@@ -179,15 +197,61 @@ plt.tight_layout()
 
 st.pyplot(fig_staff)
 
-# Mostrar Tabla Maestra 
-tabla_mostrar = resumen_staff.copy()
-tabla_mostrar.columns = ['Rango Experiencia', 'Casos', 'Seniority Mediano (Meses)', 'Recompra Mediana', 'Prob. Éxito (%)', 'Ticket Mediano']
+tabla_staff = resumen_staff.copy()
+tabla_staff.columns = ['Rango Experiencia', 'Casos', 'Seniority Mediano (Meses)', 'Recompra Mediana', 'Prob. Éxito (%)', 'Ticket Mediano']
+formato_staff = {'Seniority Mediano (Meses)': "{:.1f}", 'Recompra Mediana': "{:.2%}", 'Prob. Éxito (%)': "{:.1f}%", 'Ticket Mediano': "${:,.0f}"}
+st.dataframe(tabla_staff.style.format(formato_staff), use_container_width=True)
 
-formato_columnas = {
-    'Seniority Mediano (Meses)': "{:.1f}",
-    'Recompra Mediana': "{:.2%}",
-    'Prob. Éxito (%)': "{:.1f}%",
-    'Ticket Mediano': "${:,.0f}"
-}
+st.markdown("<br><hr><br>", unsafe_allow_html=True)
 
-st.dataframe(tabla_mostrar.style.format(formato_columnas), use_container_width=True)
+# ------------------------------------------
+# 4.2 UPT (UNIDADES POR TICKET)
+# ------------------------------------------
+st.subheader("Venta Cruzada y Outfit (UPT)")
+
+df_clean_upt = df_filt[(df_filt['UPT_3M'] > 0) & (df_filt['UPT_3M'] <= 10)].copy()
+
+resumen_upt = df_clean_upt.groupby('Rango_UPT', observed=False).agg(
+    Casos=('Target_Tasa_Recompra', 'count'),
+    UPT_Mediano=('UPT_3M', 'median'),
+    Recompra_Mediana=('Target_Tasa_Recompra', 'median'),
+    Prob_Exito_Elite=('Es_Elite', 'mean'),
+    Ticket_Mediano=('Ticket_Promedio_3M', 'median')
+).reset_index()
+
+resumen_upt['Prob_Exito_Elite_Pct'] = (resumen_upt['Prob_Exito_Elite'] * 100).round(1)
+resumen_upt['Recompra_Mediana'] = resumen_upt['Recompra_Mediana'].fillna(0)
+
+sns.set_theme(style="whitegrid") 
+fig_upt, ax_upt = plt.subplots(figsize=(12, 7))
+
+sns.lineplot(data=resumen_upt, x='Rango_UPT', y='Recompra_Mediana', 
+             marker='D', markersize=12, linewidth=3, color='#117864', sort=False, ax=ax_upt) 
+
+for x, y in zip(range(len(resumen_upt)), resumen_upt['Recompra_Mediana']):
+    if resumen_upt.loc[x, 'Casos'] > 0:
+        label_text = f'{y*100:.1f}%'
+        ax_upt.text(x, y + 0.0008, label_text, 
+                 ha='center', va='bottom', 
+                 fontweight='bold', fontsize=12, color='#0E6251')
+
+ax_upt.set_title('Impacto de la Venta Cruzada (UPT) en la Recompra', fontsize=16, fontweight='bold', pad=20, color='#17202A')
+ax_upt.set_ylabel('Tasa de Recompra (Mediana)', fontsize=13)
+ax_upt.set_xlabel('Nivel de Unidades por Ticket (UPT)', fontsize=13)
+
+ax_upt.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1, decimals=0))
+
+y_min = resumen_upt['Recompra_Mediana'].min()
+y_max = resumen_upt['Recompra_Mediana'].max()
+if y_max > 0:
+    ax_upt.set_ylim(y_min * 0.95, y_max * 1.15) 
+
+sns.despine(left=True, bottom=True)
+plt.tight_layout()
+
+st.pyplot(fig_upt)
+
+tabla_upt = resumen_upt[['Rango_UPT', 'Casos', 'UPT_Mediano', 'Recompra_Mediana', 'Prob_Exito_Elite_Pct', 'Ticket_Mediano']].copy()
+tabla_upt.columns = ['Rango UPT', 'Casos', 'UPT Mediano', 'Recompra Mediana', 'Prob. Éxito (%)', 'Ticket Mediano']
+formato_upt = {'UPT Mediano': "{:.2f}", 'Recompra Mediana': "{:.2%}", 'Prob. Éxito (%)': "{:.1f}%", 'Ticket Mediano': "${:,.0f}"}
+st.dataframe(tabla_upt.style.format(formato_upt), use_container_width=True)
