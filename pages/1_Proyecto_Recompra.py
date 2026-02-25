@@ -591,7 +591,7 @@ resumen_desc = df_clean_desc.groupby('Rango_Descuento', observed=False).agg(
     Volumen_Casos=('Target_Tasa_Recompra', 'count'),
     Descuento_Mediano=('Porcentaje_Descuento_3M', 'median'),
     Recompra_Mediana=('Target_Tasa_Recompra', 'median'), # Mediana para balancear extremos
-    Prob_Exito_Elite=('Es_Elite', 'mean'), # % de casos que superan el 13.7%
+    Prob_Exito=('Es_Elite', 'mean'), # % de casos que superan el 13.7%
     Ticket_Mediano=('Ticket_Promedio_3M', 'median')
 ).reset_index()
 
@@ -624,13 +624,13 @@ plt.tight_layout()
 st.pyplot(fig_desc)
 
 # Tabla de Resumen
-st.markdown("**--- DETALLE MATEMÁTICO: DESCUENTOS VS LEALTAD (META GLOBAL 13.7%) ---**")
-tabla_desc_final = resumen_desc[['Rango_Descuento', 'Volumen_Casos', 'Recompra_Mediana', 'Prob_Exito_Elite', 'Ticket_Mediano']].copy()
-tabla_desc_final.columns = ['Rango Descuento', 'Casos', 'Recompra Mediana', 'Prob. Éxito Elite (>13.7%)', 'Ticket Mediano']
+#st.markdown("**--- DETALLE MATEMÁTICO: DESCUENTOS VS LEALTAD (META GLOBAL 13.7%) ---**")
+tabla_desc_final = resumen_desc[['Rango_Descuento', 'Volumen_Casos', 'Recompra_Mediana', 'Prob_Exito', 'Ticket_Mediano']].copy()
+tabla_desc_final.columns = ['Rango Descuento', 'Casos', 'Recompra Mediana', 'Prob. Éxito', 'Ticket Mediano']
 
 formato_desc_final = {
     'Recompra Mediana': "{:.2%}", 
-    'Prob. Éxito Elite (>13.7%)': "{:.1%}", 
+    'Prob. Éxito': "{:.1%}", 
     'Ticket Mediano': "${:,.0f}"
 }
 
@@ -684,4 +684,5 @@ formato_habeas = {
     'Ticket Mediano': "${:,.0f}"
 }
 st.dataframe(tabla_habeas.style.format(formato_habeas), width=800)
+
 
