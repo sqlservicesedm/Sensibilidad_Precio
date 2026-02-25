@@ -8,7 +8,4 @@ matplotlib
 seaborn
 numpy
 scikit-learn
-
-
-
-
+adjustText
