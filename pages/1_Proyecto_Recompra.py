@@ -146,6 +146,21 @@ def load_data():
     )
     # Definimos Éxito específico para este análisis (>15%)
     df['Es_Mes_Exitoso'] = df['Target_Tasa_Recompra'] > 0.15
+
+    # Bins Globales: Habeas Data
+    bins_habeas = [-0.01, 0.10, 0.15, 0.20, 0.30, 1.01]
+    labels_habeas = [
+        'Crítico\n(<10%)',
+        'Bajo\n(10-15%)',
+        'Aceptable\n(15-20%)',
+        'Superior\n(20-30%)',
+        'Alto CRM\n(>30%)'
+    ]
+    df['Rango_Captura'] = pd.cut(
+        df['Tasa_Captura_HabeasData_3M'], 
+        bins=bins_habeas, 
+        labels=labels_habeas
+    )
     
     # Limpieza de nulos para filtros
     for col in ['Formato', 'Jefe_Zona', 'Ciudad', 'Tienda']:
@@ -620,3 +635,54 @@ formato_desc_final = {
 }
 
 st.dataframe(tabla_desc_final.style.format(formato_desc_final), width=800)
+
+st.markdown("<br><hr><br>", unsafe_allow_html=True)
+
+# ------------------------------------------
+# 4.7 CAPTURA DE DATOS (HABEAS DATA - CRM)
+# ------------------------------------------
+st.subheader("Captura de Datos - CRM (Habeas Data)")
+
+# Filtrar datos de la selección actual
+df_clean_habeas = df_filt.copy()
+
+resumen_habeas = df_clean_habeas.groupby('Rango_Captura', observed=False).agg(
+    Casos=('Target_Tasa_Recompra', 'count'),
+    Recompra_Mediana=('Target_Tasa_Recompra', 'median'),
+    Prob_Exito_Elite=('Es_Elite', 'mean'),
+    Ticket_Mediano=('Ticket_Promedio_3M', 'median')
+).reset_index()
+
+resumen_habeas['Prob_Exito_Elite_Pct'] = (resumen_habeas['Prob_Exito_Elite'] * 100).round(1)
+resumen_habeas['Recompra_Mediana'] = resumen_habeas['Recompra_Mediana'].fillna(0)
+
+sns.set_theme(style="whitegrid")
+fig_habeas, ax_habeas = plt.subplots(figsize=(12, 7))
+color_crm = '#4B0082' 
+
+# Tu lineplot exacto con marcadores de diamante
+sns.lineplot(data=resumen_habeas, x='Rango_Captura', y='Recompra_Mediana', 
+             marker='D', markersize=12, linewidth=3, color=color_crm, sort=False, ax=ax_habeas)
+
+for x, y in zip(range(len(resumen_habeas)), resumen_habeas['Recompra_Mediana']):
+    if resumen_habeas.loc[x, 'Casos'] > 0:
+        ax_habeas.text(x, y + 0.0008, f'{y*100:.1f}%', ha='center', va='bottom', 
+                       fontweight='bold', fontsize=12, color=color_crm)
+
+ax_habeas.set_title('El Cimiento de la Recompra: Captura de Datos - CRM', fontsize=16, fontweight='bold', pad=20)
+ax_habeas.set_ylabel('Tasa de Recompra (Mediana)', fontsize=13)
+ax_habeas.set_xlabel('Tasa de Captura Habeas Data (Clientes Identificados)', fontsize=13)
+ax_habeas.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1, decimals=0))
+
+plt.tight_layout()
+st.pyplot(fig_habeas)
+
+# Tabla Final CRM
+tabla_habeas = resumen_habeas[['Rango_Captura', 'Casos', 'Recompra_Mediana', 'Prob_Exito_Elite_Pct', 'Ticket_Mediano']].copy()
+tabla_habeas.columns = ['Rango Captura', 'Casos', 'Recompra Mediana', 'Prob. Éxito (%)', 'Ticket Mediano']
+formato_habeas = {
+    'Recompra Mediana': "{:.2%}", 
+    'Prob. Éxito (%)': "{:.1f}%", 
+    'Ticket Mediano': "${:,.0f}"
+}
+st.dataframe(tabla_habeas.style.format(formato_habeas), width=800)
