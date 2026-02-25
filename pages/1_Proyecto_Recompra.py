@@ -340,127 +340,94 @@ st.dataframe(tabla_calzado.style.format(formato_calzado), use_container_width=Tr
 
 
 st.markdown("<br><hr><br>", unsafe_allow_html=True)
-
 # =============================================================================
-# 4.4 MAPA DE OPORTUNIDAD GEOGRÁFICA (CORREGIDO CON ESCALA DINÁMICA)
+# 4.4 MAPA DE OPORTUNIDAD GEOGRÁFICA (ESTÁTICO - VISTA NACIONAL)
 # =============================================================================
-st.subheader("Mapa de Oportunidad de Recompra")
+st.subheader("Mapa de Oportunidad Geográfica (Nacional)")
+st.markdown("💡 *Este mapa mantiene la vista global de todas las ciudades para identificar plazas clave, independientemente de los filtros aplicados arriba.*")
 
-# --- EL TRUCO MAGISTRAL (Monkey Patching para salvar adjustText) ---
-import numpy as np
-if not hasattr(np, 'Inf'):
-    np.Inf = np.inf
-# -------------------------------------------------------------------
+# Usamos 'df' (dataset global) en lugar de 'df_filt' para congelar la visual
+resumen_scatter = df.groupby('Ciudad', observed=False).agg(
+    Volumen_Casos=('Target_Tasa_Recompra', 'count'),
+    Tasa_Recompra=('Target_Tasa_Recompra', 'median'),
+    Prob_Exito_Elite=('Es_Elite', 'mean'),
+    Ticket_Promedio=('Ticket_Promedio_3M', 'median')
+).reset_index()
 
-# 1. SOPORTE PARA adjustText
-try:
-    from adjustText import adjust_text
-    HAS_ADJUST_TEXT = True
-except ImportError:
-    HAS_ADJUST_TEXT = False
+# Filtro para evitar ruido
+data_scatter = resumen_scatter[resumen_scatter['Volumen_Casos'] > 20].copy()
 
-# 2. LÓGICA DE ZOOM Y PROTECCIÓN DE FILTROS
-if tienda_sel != "Todas":
-    st.info("💡 Para ver el mapa de dispersión, selecciona 'Todas' en el filtro de Tiendas para comparar locales, o 'Todas' en Ciudades para el mapa nacional.")
-else:
-    # Si vemos todo el país, agrupamos por ciudad. Si filtramos una ciudad, agrupamos por tienda.
-    if ciudad_sel == "Todas":
-        grupo_col = 'Ciudad'
-        titulo_scatter = 'Mapa de Oportunidad Geográfica: Volumen vs. Recompra'
-        min_vol = 20 # Filtro para el mapa nacional
-    else:
-        grupo_col = 'Tienda'
-        titulo_scatter = f'Mapa de Oportunidad: Tiendas en {ciudad_sel}'
-        min_vol = 1 # Queremos ver todas las tiendas posibles en la vista local
+# Ordenamos por volumen para que el zig-zag se aplique de izquierda a derecha
+data_scatter = data_scatter.sort_values('Volumen_Casos').reset_index(drop=True)
 
-    # 3. PREPARACIÓN DE DATOS
-    resumen_scatter = df_filt.groupby(grupo_col, observed=False).agg(
-        Volumen_Casos=('Target_Tasa_Recompra', 'count'),
-        Tasa_Recompra=('Target_Tasa_Recompra', 'median'),
-        Prob_Exito_Elite=('Es_Elite', 'mean'),
-        Ticket_Promedio=('Ticket_Promedio_3M', 'median')
-    ).reset_index()
+if len(data_scatter) > 1:
+    sns.set_theme(style="whitegrid")
+    fig_scatter, ax_scatter = plt.subplots(figsize=(14, 9))
 
-    # Filtro para evitar ruido
-    data_scatter = resumen_scatter[resumen_scatter['Volumen_Casos'] >= min_vol].copy()
+    sns.scatterplot(
+        data=data_scatter, 
+        x='Volumen_Casos', 
+        y='Tasa_Recompra', 
+        size='Ticket_Promedio', 
+        sizes=(100, 900),
+        alpha=0.6,
+        palette='RdYlGn', 
+        hue='Prob_Exito_Elite',
+        edgecolor='black',
+        linewidth=1,
+        legend=False,
+        ax=ax_scatter
+    )
 
-    if len(data_scatter) > 1:
-        # 4. VISUALIZACIÓN
-        sns.set_theme(style="whitegrid")
-        fig_scatter, ax_scatter = plt.subplots(figsize=(14, 9))
+    # Ajuste del Eje X a Logarítmico (siempre, porque es vista nacional)
+    ax_scatter.set_xscale('log')
+    x_min = data_scatter['Volumen_Casos'].min() * 0.8
+    x_max = data_scatter['Volumen_Casos'].max() * 1.2
+    ax_scatter.set_xlim(x_min, x_max) 
 
-        # A. SCATTER PLOT
-        sns.scatterplot(
-            data=data_scatter, 
-            x='Volumen_Casos', 
-            y='Tasa_Recompra', 
-            size='Ticket_Promedio', 
-            sizes=(100, 900),
-            alpha=0.6,
-            palette='RdYlGn', 
-            hue='Prob_Exito_Elite',
-            edgecolor='black',
-            linewidth=1,
-            legend=False,
-            ax=ax_scatter
-        )
-
-        # B. AJUSTE DINÁMICO DEL EJE X (LA CORRECCIÓN CLAVE)
-        if ciudad_sel == "Todas":
-            # Vista Nacional: LOG para manejar diferencias enormes
-            ax_scatter.set_xscale('log')
-            x_min = data_scatter['Volumen_Casos'].min() * 0.8
-            x_max = data_scatter['Volumen_Casos'].max() * 1.2
-        else:
-            # Vista Ciudad: LINEAL porque las tiendas son comparables
-            ax_scatter.set_xscale('linear')
-            # Margen más ajustado para vista lineal
-            x_min = data_scatter['Volumen_Casos'].min() * 0.9
-            x_max = data_scatter['Volumen_Casos'].max() * 1.1
-
-        ax_scatter.set_xlim(x_min, x_max) 
-
-        # C. ETIQUETADO INTELIGENTE
-        texts = []
-        for i in range(data_scatter.shape[0]):
-            row = data_scatter.iloc[i]
-            # Etiquetamos más agresivamente en la vista de tiendas
-            if ciudad_sel != "Todas" or row['Volumen_Casos'] > 100 or row['Tasa_Recompra'] > 0.13 or row['Tasa_Recompra'] < 0.08:
-                label = f"{row[grupo_col]}\n({row['Tasa_Recompra']*100:.1f}%)"
-                texts.append(ax_scatter.text(row['Volumen_Casos'], row['Tasa_Recompra'], label, 
-                                             fontsize=9, fontweight='bold', color='#2C3E50'))
-
-        if HAS_ADJUST_TEXT:
-            # Fuerza de repulsión ajustada para evitar superposiciones
-            adjust_text(texts, ax=ax_scatter, arrowprops=dict(arrowstyle='-', color='gray', lw=0.8), force_points=0.3, force_text=0.5)
-
-        # D. TENDENCIA Y FORMATOS
-        sns.regplot(data=data_scatter, x='Volumen_Casos', y='Tasa_Recompra', 
-                    scatter=False, color='#95a5a6', line_kws={'linestyle':'--', 'linewidth':1.5}, ax=ax_scatter)
-
-        max_recompra = data_scatter['Tasa_Recompra'].max()
-        if max_recompra > 0:
-            ax_scatter.set_ylim(0, max_recompra * 1.15) 
-        ax_scatter.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1, decimals=0))
-
-        ax_scatter.set_title(titulo_scatter, fontsize=18, fontweight='bold', pad=20)
-        ax_scatter.set_xlabel('Volumen de Operación (Total Casos)', fontsize=12)
-        ax_scatter.set_ylabel('Tasa de Recompra (Mediana)', fontsize=12)
-
-        sns.despine(trim=True)
-        plt.tight_layout()
-        st.pyplot(fig_scatter)
-
-        # 5. TABLA DE RESUMEN
-        st.markdown(f"**--- LAS JOYAS OCULTAS (Alta Lealtad en {grupo_col}s Medianas) ---**")
-        joyas = data_scatter[(data_scatter['Tasa_Recompra'] > 0.12)].sort_values('Tasa_Recompra', ascending=False)
+    # Etiquetado nativo con efecto Zig-Zag
+    for i in range(data_scatter.shape[0]):
+        row = data_scatter.iloc[i]
         
-        if not joyas.empty:
-            joyas_print = joyas[[grupo_col, 'Tasa_Recompra', 'Volumen_Casos', 'Ticket_Promedio']].copy()
-            joyas_print.columns = [grupo_col, 'Tasa Recompra Mediana', 'Volumen Casos', 'Ticket Promedio']
-            st.dataframe(joyas_print.style.format({'Tasa Recompra Mediana': "{:.2%}", 'Ticket Promedio': "${:,.0f}"}), width=600)
-        else:
-            st.info("No hay joyas ocultas bajo estos parámetros de filtro.")
-    else:
-        st.warning("No hay suficientes datos comparables para trazar el mapa de dispersión.")
+        # Etiquetamos solo las ciudades con volumen o tasas atípicas
+        if row['Volumen_Casos'] > 100 or row['Tasa_Recompra'] > 0.13 or row['Tasa_Recompra'] < 0.08:
+            label = f"{row['Ciudad']}\n({row['Tasa_Recompra']*100:.1f}%)"
+            
+            # Zig-Zag
+            if i % 2 == 0:
+                offset_y = 0.002
+                va_pos = 'bottom'
+            else:
+                offset_y = -0.002
+                va_pos = 'top'
 
+            ax_scatter.text(row['Volumen_Casos'], row['Tasa_Recompra'] + offset_y, label, 
+                            fontsize=9, fontweight='bold', color='#2C3E50', ha='center', va=va_pos)
+
+    sns.regplot(data=data_scatter, x='Volumen_Casos', y='Tasa_Recompra', 
+                scatter=False, color='#95a5a6', line_kws={'linestyle':'--', 'linewidth':1.5}, ax=ax_scatter)
+
+    max_recompra = data_scatter['Tasa_Recompra'].max()
+    if max_recompra > 0:
+        ax_scatter.set_ylim(0, max_recompra * 1.15) 
+    ax_scatter.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1, decimals=0))
+
+    ax_scatter.set_title('Mapa de Oportunidad Geográfica: Volumen vs. Recompra', fontsize=18, fontweight='bold', pad=20)
+    ax_scatter.set_xlabel('Volumen de Operación (Total Tienda-Mes)', fontsize=12)
+    ax_scatter.set_ylabel('Tasa de Recompra (Mediana)', fontsize=12)
+
+    sns.despine(trim=True)
+    plt.tight_layout()
+    st.pyplot(fig_scatter)
+
+    # Tabla de Joyas Ocultas (También estática)
+    st.markdown("**--- LAS JOYAS OCULTAS (Alta Lealtad en Ciudades Medianas) ---**")
+    joyas = data_scatter[(data_scatter['Tasa_Recompra'] > 0.12) & (data_scatter['Volumen_Casos'] < 1000)]
+    
+    if not joyas.empty:
+        joyas_print = joyas.sort_values('Tasa_Recompra', ascending=False)[['Ciudad', 'Tasa_Recompra', 'Volumen_Casos']]
+        joyas_print.columns = ['Ciudad', 'Tasa Recompra Mediana', 'Volumen Casos']
+        # Ajuste moderno recomendado por Streamlit usando width en lugar de use_container_width
+        st.dataframe(joyas_print.style.format({'Tasa Recompra Mediana': "{:.2%}"}), width=600)
+    else:
+        st.info("No hay joyas ocultas bajo estos parámetros.")
