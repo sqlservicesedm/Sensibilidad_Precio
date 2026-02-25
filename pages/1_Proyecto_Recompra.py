@@ -340,6 +340,7 @@ st.dataframe(tabla_calzado.style.format(formato_calzado), use_container_width=Tr
 
 
 st.markdown("<br><hr><br>", unsafe_allow_html=True)
+st.markdown("<br><hr><br>", unsafe_allow_html=True)
 
 # ------------------------------------------
 # 4.4 MAPA DE OPORTUNIDAD (SCATTER PLOT)
@@ -374,12 +375,6 @@ else:
     data_scatter = resumen_scatter[resumen_scatter['Volumen_Casos'] > min_vol].copy()
 
     if len(data_scatter) > 1:
-        try:
-            from adjustText import adjust_text
-            HAS_ADJUST_TEXT = False
-        except ImportError:
-            HAS_ADJUST_TEXT = False
-        
         sns.set_theme(style="whitegrid")
         fig_scatter, ax_scatter = plt.subplots(figsize=(14, 9))
 
@@ -404,18 +399,14 @@ else:
         x_max = data_scatter['Volumen_Casos'].max() * 1.2
         ax_scatter.set_xlim(x_min, x_max) 
 
-        # Etiquetado Inteligente
-        texts = []
+        # Etiquetado (Sin adjustText)
         for i in range(data_scatter.shape[0]):
             row = data_scatter.iloc[i]
             # Condición de etiquetado según el nivel de zoom
             if row['Volumen_Casos'] > min_casos_label or row['Tasa_Recompra'] > 0.13 or row['Tasa_Recompra'] < 0.08 or ciudad_sel != "Todas":
                 label = f"{row[grupo_col]}\n({row['Tasa_Recompra']*100:.1f}%)"
-                texts.append(ax_scatter.text(row['Volumen_Casos'], row['Tasa_Recompra'], label, 
-                                             fontsize=9, fontweight='bold', color='#2C3E50'))
-
-        if HAS_ADJUST_TEXT:
-            adjust_text(texts, ax=ax_scatter, arrowprops=dict(arrowstyle='-', color='gray', lw=0.8))
+                ax_scatter.text(row['Volumen_Casos'], row['Tasa_Recompra'], label, 
+                                fontsize=9, fontweight='bold', color='#2C3E50')
 
         # Línea de tendencia
         sns.regplot(data=data_scatter, x='Volumen_Casos', y='Tasa_Recompra', 
@@ -452,4 +443,5 @@ else:
 
     else:
         st.warning("No hay suficientes datos comparables para trazar el mapa de dispersión con estos filtros.")
+
 
