@@ -130,8 +130,8 @@ def load_data():
         bins=bins_calzado, 
         labels=labels_calzado
     )
-    # Bins Globales: Descuento (Actualizado)
-    bins_desc = [-0.01, 0.05, 0.15, 0.25, 0.40, 1.0]
+    # Bins Globales: Descuento (Unificado al Estándar Global)
+    bins_desc = [-0.01, 0.05, 0.15, 0.25, 0.40, 1.01]
     labels_desc = [
         '1. Full Price (<5%)', 
         '2. Promo Táctica (5-15%)', 
@@ -144,9 +144,8 @@ def load_data():
         bins=bins_desc, 
         labels=labels_desc
     )
-    # Definimos Éxito específico para este análisis (>15%)
-    df['Es_Mes_Exitoso'] = df['Target_Tasa_Recompra'] > 0.15
-
+    # Usamos la meta global de 13.7% (Es_Elite) que ya definimos arriba
+    
     # Bins Globales: Habeas Data
     bins_habeas = [-0.01, 0.10, 0.15, 0.20, 0.30, 1.01]
     labels_habeas = [
@@ -575,10 +574,11 @@ if len(data_mono) > 1:
 
 else:
     st.warning("Datos insuficientes para renderizar.")
+
 st.markdown("<br><hr><br>", unsafe_allow_html=True)
 
 # ------------------------------------------
-# 4.6 ESTRATEGIA DE PRECIO (VISTA OBJETIVA)
+# 4.6 ESTRATEGIA DE PRECIO (UNIFICADO AL 13.7%)
 # ------------------------------------------
 st.subheader("Estrategia de Precio: % Descuento")
 
@@ -586,57 +586,55 @@ st.subheader("Estrategia de Precio: % Descuento")
 df_clean_desc = df_filt[(df_filt['Porcentaje_Descuento_3M'] >= 0) & 
                         (df_filt['Porcentaje_Descuento_3M'] <= 1)].copy()
 
-# Tabla Matemática (Basada en Promedios/Mean según tu nuevo código)
+# Tabla Matemática Unificada (Usando Medianas para consistencia global)
 resumen_desc = df_clean_desc.groupby('Rango_Descuento', observed=False).agg(
     Volumen_Casos=('Target_Tasa_Recompra', 'count'),
-    Descuento_Promedio=('Porcentaje_Descuento_3M', 'mean'),
-    Tasa_Recompra=('Target_Tasa_Recompra', 'mean'),
-    Probabilidad_Exito=('Es_Mes_Exitoso', 'mean'),
-    Ticket_Promedio=('Ticket_Promedio_3M', 'mean')
+    Descuento_Mediano=('Porcentaje_Descuento_3M', 'median'),
+    Recompra_Mediana=('Target_Tasa_Recompra', 'median'), # Mediana para balancear extremos
+    Prob_Exito_Elite=('Es_Elite', 'mean'), # % de casos que superan el 13.7%
+    Ticket_Mediano=('Ticket_Promedio_3M', 'median')
 ).reset_index()
 
-resumen_desc['Tasa_Recompra'] = resumen_desc['Tasa_Recompra'].fillna(0)
+resumen_desc['Recompra_Mediana'] = resumen_desc['Recompra_Mediana'].fillna(0)
 
-# Visualización (Tu código exacto)
-plt.figure(figsize=(11, 6))
+# Visualización (Tu estética con color Rojo/Vino #c0392b)
 fig_desc, ax_desc = plt.subplots(figsize=(11, 6))
 
-sns.lineplot(data=resumen_desc, x='Rango_Descuento', y='Tasa_Recompra', 
+sns.lineplot(data=resumen_desc, x='Rango_Descuento', y='Recompra_Mediana', 
              marker='o', markersize=10, linewidth=3, color='#c0392b', sort=False, ax=ax_desc)
 
 # Etiquetas de datos
-for x, y in zip(range(len(resumen_desc)), resumen_desc['Tasa_Recompra']):
+for x, y in zip(range(len(resumen_desc)), resumen_desc['Recompra_Mediana']):
     if resumen_desc.loc[x, 'Volumen_Casos'] > 0:
         ax_desc.text(x, y + 0.0005, f'{y*100:.1f}%', ha='center', va='bottom', fontweight='bold', fontsize=12)
 
 ax_desc.set_title('El Costo de la Lealtad: ¿El descuento fideliza?', fontsize=14, fontweight='bold')
-ax_desc.set_ylabel('Tasa de Recompra (3 Meses)', fontsize=12)
+ax_desc.set_ylabel('Tasa de Recompra (Mediana)', fontsize=12)
 ax_desc.set_xlabel('Nivel de Agresividad Promocional (Descuento Medio)', fontsize=12)
 ax_desc.grid(True, linestyle='--', alpha=0.5)
 
-# Límites dinámicos basados en tu código
-y_min_desc = resumen_desc['Tasa_Recompra'].min()
-y_max_desc = resumen_desc['Tasa_Recompra'].max()
+# Límites dinámicos
+y_min_desc = resumen_desc['Recompra_Mediana'].min()
+y_max_desc = resumen_desc['Recompra_Mediana'].max()
 if y_max_desc > 0:
-    ax_desc.set_ylim(y_min_desc * 0.95, y_max_desc * 1.05)
+    ax_desc.set_ylim(y_min_desc * 0.95, y_max_desc * 1.15)
 
+ax_desc.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1, decimals=0))
 plt.tight_layout()
 st.pyplot(fig_desc)
 
-# Tabla de Resumen Matemático
-st.markdown("**--- RESUMEN MATEMÁTICO: DESCUENTOS VS LEALTAD ---**")
-tabla_desc_final = resumen_desc[['Rango_Descuento', 'Volumen_Casos', 'Tasa_Recompra', 'Probabilidad_Exito', 'Ticket_Promedio']].copy()
-tabla_desc_final.columns = ['Rango Descuento', 'Casos', 'Recompra Promedio', 'Prob. Éxito (>15%)', 'Ticket Promedio']
+# Tabla de Resumen
+st.markdown("**--- DETALLE MATEMÁTICO: DESCUENTOS VS LEALTAD (META GLOBAL 13.7%) ---**")
+tabla_desc_final = resumen_desc[['Rango_Descuento', 'Volumen_Casos', 'Recompra_Mediana', 'Prob_Exito_Elite', 'Ticket_Mediano']].copy()
+tabla_desc_final.columns = ['Rango Descuento', 'Casos', 'Recompra Mediana', 'Prob. Éxito Elite (>13.7%)', 'Ticket Mediano']
 
 formato_desc_final = {
-    'Recompra Promedio': "{:.2%}", 
-    'Prob. Éxito (>15%)': "{:.1%}", 
-    'Ticket Promedio': "${:,.0f}"
+    'Recompra Mediana': "{:.2%}", 
+    'Prob. Éxito Elite (>13.7%)': "{:.1%}", 
+    'Ticket Mediano': "${:,.0f}"
 }
 
 st.dataframe(tabla_desc_final.style.format(formato_desc_final), width=800)
-
-st.markdown("<br><hr><br>", unsafe_allow_html=True)
 
 # ------------------------------------------
 # 4.7 CAPTURA DE DATOS (HABEAS DATA - CRM)
@@ -686,3 +684,4 @@ formato_habeas = {
     'Ticket Mediano': "${:,.0f}"
 }
 st.dataframe(tabla_habeas.style.format(formato_habeas), width=800)
+
