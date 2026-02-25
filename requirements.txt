@@ -8,3 +8,4 @@ statsmodels
 matplotlib
 seaborn
 scikit-learn
+adjustText==1.1.1
