@@ -130,6 +130,20 @@ def load_data():
         bins=bins_calzado, 
         labels=labels_calzado
     )
+    # Bins Globales: Descuento
+    bins_desc = [-0.01, 0.05, 0.15, 0.25, 0.40, 1.01]
+    labels_desc = [
+        'Full Price\n(<5%)',
+        'Promo Táctica\n(5-15%)',
+        'Promo Estructural\n(15-25%)',
+        'Liquidación\n(25-40%)',
+        'Remate\n(>40%)'
+    ]
+    df['Rango_Descuento'] = pd.cut(
+        df['Porcentaje_Descuento_3M'], 
+        bins=bins_desc, 
+        labels=labels_desc
+    )
     
     # Limpieza de nulos para filtros
     for col in ['Formato', 'Jefe_Zona', 'Ciudad', 'Tienda']:
@@ -426,7 +440,7 @@ if len(data_scatter) > 1:
     # ==========================================
     # TABLA COMPLETA CON SCROLL
     # ==========================================
-    st.markdown("**--- DETALLE POR CIUDAD (VISTA NACIONAL COMPLETA) ---**")
+    #st.markdown("**--- DETALLE POR CIUDAD (VISTA NACIONAL COMPLETA) ---**")
     
     # Tomamos todas las ciudades graficadas y las ordenamos
     tabla_ciudades = data_scatter.sort_values('Tasa_Recompra', ascending=False)[['Ciudad', 'Tasa_Recompra', 'Volumen_Casos', 'Ticket_Promedio']]
@@ -443,8 +457,8 @@ st.markdown("<br><hr><br>", unsafe_allow_html=True)
 # =============================================================================
 # 4.5 EFECTO MONOPOLIO (CANTIDAD DE TIENDAS VS LEALTAD - ESTÁTICO)
 # =============================================================================
-st.subheader("Efecto Monopolio: Cantidad de Tiendas vs. Lealtad")
-st.markdown("💡 *Vista estática nacional: ¿Tener una sola tienda exclusiva en una ciudad genera más retención que tener múltiples opciones?*")
+st.subheader("Oportunidad Geográfica")
+#st.markdown("💡 *Vista estática nacional: ¿Tener una sola tienda exclusiva en una ciudad genera más retención que tener múltiples opciones?*")
 
 # 1. AGRUPACIÓN INTELIGENTE (Usando el 'df' global, no el filtrado)
 resumen_ciudad_mono = df.groupby('Ciudad', observed=False).agg(
@@ -510,7 +524,7 @@ if len(data_mono) > 1:
     if max_recompra_mono > 0:
         ax_mono.set_ylim(0, max_recompra_mono * 1.15) 
 
-    ax_mono.set_title('Efecto de la Exclusividad (Cantidad de Tiendas por Plaza)', fontsize=16, fontweight='bold', pad=20)
+    ax_mono.set_title('Efecto de la cantidad de tiendas', fontsize=16, fontweight='bold', pad=20)
     ax_mono.set_xlabel('Volumen de Operación (Escala Log)', fontsize=12)
     ax_mono.set_ylabel('Tasa de Recompra Mediana (%)', fontsize=12)
     ax_mono.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1, decimals=0))
@@ -525,7 +539,7 @@ if len(data_mono) > 1:
     st.pyplot(fig_mono)
 
     # 4. TABLA COMPARATIVA
-    st.markdown("**--- COMPARATIVO ESTRATÉGICO: TIENDA ÚNICA VS MULTI-TIENDA ---**")
+    #st.markdown("**--- COMPARATIVO ESTRATÉGICO: TIENDA ÚNICA VS MULTI-TIENDA ---**")
     
     data_mono['Tipo_Plaza'] = np.where(data_mono['Num_Tiendas'] == 1, 'Plaza Única (1 Tienda)', 'Plaza Múltiple (>1 Tienda)')
     comparativo = data_mono.groupby('Tipo_Plaza', observed=False).agg(
@@ -544,3 +558,65 @@ if len(data_mono) > 1:
 
 else:
     st.warning("Datos insuficientes para renderizar el Efecto Monopolio.")
+st.markdown("<br><hr><br>", unsafe_allow_html=True)
+
+# ------------------------------------------
+# 4.6 ESTRATEGIA DE DESCUENTO (DINÁMICO)
+# ------------------------------------------
+st.subheader("Estrategia de Descuento")
+
+# Filtrar datos de la selección actual
+df_clean_desc = df_filt[(df_filt['Porcentaje_Descuento_3M'] >= 0) & 
+                        (df_filt['Porcentaje_Descuento_3M'] <= 1)].copy()
+
+resumen_desc = df_clean_desc.groupby('Rango_Descuento', observed=False).agg(
+    Casos=('Target_Tasa_Recompra', 'count'),
+    Descuento_Mediano=('Porcentaje_Descuento_3M', 'median'),
+    Recompra_Mediana=('Target_Tasa_Recompra', 'median'),
+    Prob_Exito_Elite=('Es_Elite', 'mean'),
+    Ticket_Mediano=('Ticket_Promedio_3M', 'median')
+).reset_index()
+
+resumen_desc['Prob_Exito_Elite_Pct'] = (resumen_desc['Prob_Exito_Elite'] * 100).round(1)
+resumen_desc['Recompra_Mediana'] = resumen_desc['Recompra_Mediana'].fillna(0)
+
+sns.set_theme(style="whitegrid")
+fig_desc, ax_desc = plt.subplots(figsize=(12, 7))
+color_chart = '#922B21'
+
+# Tu lineplot exacto
+sns.lineplot(data=resumen_desc, x='Rango_Descuento', y='Recompra_Mediana', 
+             marker='s', markersize=12, linewidth=3, color=color_chart, sort=False, ax=ax_desc)
+
+for x, y in zip(range(len(resumen_desc)), resumen_desc['Recompra_Mediana']):
+    if resumen_desc.loc[x, 'Casos'] > 0:
+        label_text = f'{y*100:.1f}%'
+        ax_desc.text(x, y + 0.0008, label_text, 
+                 ha='center', va='bottom', 
+                 fontweight='bold', fontsize=12, color=color_chart)
+
+ax_desc.set_title('¿El Descuento "Compra" Lealtad? Impacto de la Promo en Recompra', fontsize=16, fontweight='bold', pad=20, color='#17202A')
+ax_desc.set_ylabel('Tasa de Recompra (Mediana)', fontsize=13)
+ax_desc.set_xlabel('Nivel de Agresividad Comercial (% Descuento)', fontsize=13)
+
+ax_desc.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1, decimals=0))
+y_min = resumen_desc['Recompra_Mediana'].min()
+y_max = resumen_desc['Recompra_Mediana'].max()
+
+if y_max > 0:
+    ax_desc.set_ylim(y_min * 0.9, y_max * 1.2) 
+
+sns.despine(left=True, bottom=True)
+plt.tight_layout()
+st.pyplot(fig_desc)
+
+# Tabla Maestra de Descuento
+tabla_desc = resumen_desc[['Rango_Descuento', 'Casos', 'Descuento_Mediano', 'Recompra_Mediana', 'Prob_Exito_Elite_Pct', 'Ticket_Mediano']].copy()
+tabla_desc.columns = ['Rango Descuento', 'Casos', 'Descuento Mediano', 'Recompra Mediana', 'Prob. Éxito (%)', 'Ticket Mediano']
+formato_desc = {
+    'Descuento Mediano': "{:.1%}", 
+    'Recompra Mediana': "{:.2%}", 
+    'Prob. Éxito (%)': "{:.1f}%", 
+    'Ticket Mediano': "${:,.0f}"
+}
+st.dataframe(tabla_desc.style.format(formato_desc), width=800)
