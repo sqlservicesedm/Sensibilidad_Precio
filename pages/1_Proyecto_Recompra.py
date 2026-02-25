@@ -178,31 +178,43 @@ except Exception as e:
     st.error("No se encontró el archivo 'data/datos_recompra.csv'.")
     st.stop()
 
+# --- BARRA LATERAL: FILTROS DE SEGMENTACIÓN MULTI-SELECCIÓN ---
 st.sidebar.header("Filtros de Segmentación")
 
-formatos = ["Todos"] + list(df['Formato'].unique())
-formato_sel = st.sidebar.selectbox("Formato", formatos)
-df_f1 = df[df['Formato'] == formato_sel] if formato_sel != "Todos" else df.copy()
+# 1. Filtro Formato
+# Obtenemos la lista única de formatos
+opciones_formato = sorted(df['Formato'].unique())
+formato_sel = st.sidebar.multiselect("Formato", options=opciones_formato)
 
-jefes = ["Todos"] + list(df_f1['Jefe_Zona'].unique())
-jefe_sel = st.sidebar.selectbox("Jefe de Zona", jefes)
-df_f2 = df_f1[df_f1['Jefe_Zona'] == jefe_sel] if jefe_sel != "Todos" else df_f1
+# Aplicamos el filtro: Si no hay selección, usamos todo el df, si hay, usamos .isin()
+df_filt = df[df['Formato'].isin(formato_sel)] if formato_sel else df.copy()
 
-ciudades = ["Todas"] + list(df_f2['Ciudad'].unique())
-ciudad_sel = st.sidebar.selectbox("Ciudad", ciudades)
-df_f3 = df_f2[df_f2['Ciudad'] == ciudad_sel] if ciudad_sel != "Todas" else df_f2
+# 2. Filtro Jefe de Zona (Cascada: depende de la selección de Formato)
+opciones_jefe = sorted(df_filt['Jefe_Zona'].unique())
+jefe_sel = st.sidebar.multiselect("Jefe de Zona", options=opciones_jefe)
+if jefe_sel:
+    df_filt = df_filt[df_filt['Jefe_Zona'].isin(jefe_sel)]
 
-tiendas = ["Todas"] + list(df_f3['Tienda'].unique())
-tienda_sel = st.sidebar.selectbox("Tienda", tiendas)
-df_filt = df_f3[df_f3['Tienda'] == tienda_sel] if tienda_sel != "Todas" else df_f3
+# 3. Filtro Ciudad (Cascada: depende de los filtros anteriores)
+opciones_ciudad = sorted(df_filt['Ciudad'].unique())
+ciudad_sel = st.sidebar.multiselect("Ciudad", options=opciones_ciudad)
+if ciudad_sel:
+    df_filt = df_filt[df_filt['Ciudad'].isin(ciudad_sel)]
 
+# 4. Filtro Tienda (Cascada final)
+opciones_tienda = sorted(df_filt['Tienda'].unique())
+tienda_sel = st.sidebar.multiselect("Tienda", options=opciones_tienda)
+if tienda_sel:
+    df_filt = df_filt[df_filt['Tienda'].isin(tienda_sel)]
+
+# --- VALIDACIONES DE MUESTRA ---
 n_registros = len(df_filt)
+
 if n_registros == 0:
-    st.warning("No hay registros para la combinación seleccionada.")
+    st.warning("No hay registros para la combinación seleccionada. Intenta ajustar los filtros.")
     st.stop()
 elif n_registros < 30:
-    st.sidebar.warning(f"⚠️ Selección con muestra baja ({n_registros} registros). Interpretar promedios con precaución.")
-
+    st.sidebar.warning(f"⚠️ Selección con muestra baja ({n_registros} registros). Interpretar los resultados con precaución.")
 # ==========================================
 # SECCIÓN 4: ANÁLISIS DINÁMICO
 # ==========================================
@@ -684,5 +696,6 @@ formato_habeas = {
     'Ticket Mediano': "${:,.0f}"
 }
 st.dataframe(tabla_habeas.style.format(formato_habeas), width=800)
+
 
 
