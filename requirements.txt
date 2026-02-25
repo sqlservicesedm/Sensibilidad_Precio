@@ -2,10 +2,11 @@ streamlit
 pygwalker
 pandas
 plotly
-numpy
 scipy
 statsmodels
 matplotlib
 seaborn
-scikit-learn
-adjustText==1.1.1
+numpy<2.0.0
+scikit-learn==1.5.1
+adjustText
+
