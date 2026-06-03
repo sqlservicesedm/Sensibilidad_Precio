@@ -52,12 +52,12 @@ if tienda == 'Todas las tiendas':
     df_inventario_filtered = df_inventario[(df_inventario['Marca'] == marca) & 
                                            (df_inventario['Genero'] == genero) & 
                                            (df_inventario['Tipo'] == tipo) &
-                                           (~df_inventario['Descripcion_bodega'].isin(tiendas_excluidas))]
+                                           (~df_inventario['Tienda'].isin(tiendas_excluidas))]
 else:
     df_inventario_filtered = df_inventario[(df_inventario['Marca'] == marca) & 
                                            (df_inventario['Genero'] == genero) & 
                                            (df_inventario['Tipo'] == tipo) & 
-                                           (df_inventario['Descripcion_bodega'] == tienda)]
+                                           (df_inventario['Tienda'] == tienda)]
 
 df_inventario_grouped = df_inventario_filtered.groupby('f126_precio').agg(
     Cantidad_Inventario=('Cantidad_Inventario', 'sum')
@@ -172,7 +172,7 @@ plt.grid(True)
 st.pyplot(plt)
 
 # Inventario actual:
-invt_actual = df_inventario_filtered.groupby(['Marca','Genero','Tipo','Descripcion_bodega']).agg(
+invt_actual = df_inventario_filtered.groupby(['Marca','Genero','Tipo','Tienda']).agg(
     Cantidad_Inventario=('Cantidad_Inventario', 'sum')
 ).reset_index()
 
