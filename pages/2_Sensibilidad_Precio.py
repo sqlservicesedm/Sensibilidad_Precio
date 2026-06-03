@@ -232,20 +232,13 @@ columns_of_interest = ['almacen_descri', 'cmitems_MARCA', 'cmitems_GENERO', 'cmi
                         'cmitems_MARCALINEA', 'cmitems_Talla', 'cmitems_Extension', 
                         'cmitems_codbarra_principal','f126_precio', 'Precio_Intervalo', 'P_probabilidad_normalizada','Cant_inventario']
 
-# Filtrar el DataFrame para mantener solo las columnas de interés
-probabilidades_filtered = probabilidades_filtered[columns_of_interest]
-
-# Agrupar por las columnas de interés y el intervalo de precio
-grouped = probabilidades_filtered.groupby(
-    [ 'Precio_Intervalo']
+# Reemplazo optimizado y vectorizado:
+probabilidades_filtered = probabilidades_filtered.sort_values(
+    by=['Precio_Intervalo', 'P_probabilidad_normalizada'], 
+    ascending=[True, False]
 )
 
-# Obtener los 20 SKUs con mayor P_probabilidad_normalizada para cada grupo
-top_20_skus = grouped.apply(lambda x: x.nlargest(20, 'P_probabilidad_normalizada')).reset_index(drop=True)
-
-# Ordenar top_20_skus por 'Precio_Intervalo'
-top_20_skus = top_20_skus.sort_values(by=['Precio_Intervalo', 'P_probabilidad_normalizada'], 
-                                      ascending=[True, False]).reset_index(drop=True)
+top_20_skus = probabilidades_filtered.groupby('Precio_Intervalo').head(20).reset_index(drop=True)
 
 
 # Mostrar el top 20 SKUs en Streamlit
