@@ -75,9 +75,10 @@ entre el inventario disponible y los patrones históricos de compra.
 """)
 
 with st.expander('📅 Rangos de datos y fechas de actualización', expanded=False):
+    meta = pd.read_csv('data/v2/metadata.csv').iloc[0]
     c1, c2, c3 = st.columns(3)
-    c1.info('**Inventario actual**\nSnapshot al cierre del último mes disponible.')
-    c2.info('**Demanda pasada y despacho**\nAcumulado YTD desde enero hasta el último mes.')
+    c1.info(f'**Inventario actual**\nSnapshot al cierre de **{meta["periodo_inventario"]}**.')
+    c2.info(f'**Demanda pasada y despacho**\nPeríodo: **{meta["fecha_min_venta"]}** al **{meta["fecha_max_venta"]}**.')
     c3.info('**Actualización**\nPrimer día de cada mes al subir nuevos archivos a `data/v2/`.')
 
 
