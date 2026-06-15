@@ -55,8 +55,8 @@ st.caption(
 def cargar_datos():
     """Carga los tres archivos de data/v2/ y los mantiene en cache."""
     grupos    = pd.read_csv('data/v2/grupos_kde.csv')
-    sku       = pd.read_csv('data/v2/inventario_ventas_sku.csv')
-    despacho  = pd.read_csv('data/v2/despacho_sku.csv')
+    sku       = pd.read_csv('data/v2/inventario_ventas_sku.csv.gz', compression='gzip')
+    despacho  = pd.read_csv('data/v2/despacho_sku.csv.gz', compression='gzip')
     return grupos, sku, despacho
 
 
