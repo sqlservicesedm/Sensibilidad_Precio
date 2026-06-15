@@ -1,37 +1,25 @@
 """
 4_Sensibilidad_Precio_v3.py
 
-Pagina de Streamlit para el analisis de alineacion oferta vs. demanda
-por rango de precio. Muestra cuatro curvas de densidad KDE ponderadas
-que cuentan la historia completa del inventario en el periodo:
+Pagina de Streamlit para el analisis de alineacion entre demanda pasada
+e inventario actual por rango de precio.
 
-- Azul:     Inventario actual  — lo que quedo
-- Rojo:     Ventas YTD         — lo que se vendio
-- Verde:    Despacho YTD       — lo que entro
-- Naranja:  Inventario propuesto — referencia si el stock siguiera el patron de ventas
+Muestra cuatro curvas de densidad KDE ponderadas:
+- Azul:    Inventario actual   — lo que quedo al cierre del periodo
+- Rojo:    Demanda pasada      — lo que se vendio en el periodo YTD
+- Verde:   Despacho YTD        — lo que entro al punto de venta en el periodo
+- Naranja: Inventario propuesto — referencia si el stock siguiera el patron de demanda
 
-Incluye tabla de optimizacion por intervalo de precio y descarga del
-detalle a nivel SKU filtrado por la seleccion actual.
+Nomenclatura usada en los filtros:
+    Canal:   marca o grupo comercial (Pilatos, Diesel, Superdry, MFG, etc.)
+             Columna en datos: Canal
+    Formato: tipo de operacion (Lineal, Outlet, Mixta, Franquicia, Online)
+             Columna en datos: Formato
 
 Dependencias de datos (carpeta data/v2/):
-    grupos_kde.csv
-    inventario_ventas_sku.csv.gz
-    despacho_sku.csv.gz
-
-Nomenclatura:
-    Formato: marca o canal comercial (Pilatos, Diesel, Superdry, etc.)
-    Canal:   tipo de operacion (Lineal, Outlet, Franquicia, Online, etc.)
-
-Notas de interpretacion:
-    Las curvas muestran concentracion relativa por rango de precio,
-    no cantidades absolutas. Un pico alto significa que ahi ocurre
-    la mayor parte de la actividad. Lo importante es comparar la forma
-    de las curvas — cuando estan desalineadas, el inventario no esta
-    donde ha estado la demanda historica.
-
-    El inventario propuesto redistribuye el stock actual siguiendo el
-    patron de ventas historicas. Es una referencia orientativa, no una
-    prediccion de demanda futura.
+    grupos_kde.csv              — agregado liviano para curvas y tabla
+    inventario_ventas_sku.csv.gz — detalle SKU para descarga
+    despacho_sku.csv.gz         — detalle despacho para curva KDE
 
 Ultima actualizacion: 2026-06-13
 """
@@ -50,75 +38,108 @@ st.set_page_config(page_title='Sensibilidad al Precio v3', layout='wide')
 # =============================================================================
 
 @st.cache_data
-def cargar_datos():
-    """Carga los archivos de data/v2/ y los mantiene en cache."""
-    grupos   = pd.read_csv('data/v2/grupos_kde.csv')
-    sku      = pd.read_csv('data/v2/inventario_ventas_sku.csv.gz', compression='gzip')
-    despacho = pd.read_csv('data/v2/despacho_sku.csv.gz', compression='gzip')
-    return grupos, sku, despacho
+def cargar_grupos():
+    """Carga grupos_kde.csv — archivo liviano para curvas y tabla."""
+    return pd.read_csv('data/v2/grupos_kde.csv')
 
 
-grupos, sku, despacho = cargar_datos()
+@st.cache_data
+def cargar_sku():
+    """Carga inventario_ventas_sku.csv.gz — solo para descarga."""
+    cols = [
+        'Codigo_Barras', 'Referencia', 'Talla', 'Color',
+        'Marca', 'MarcaLinea', 'Genero', 'Categoria', 'Tipo',
+        'Canal', 'Formato', 'Tienda',
+        'Precio_Lista', 'Precio_Unitario',
+        'Cantidad_Inventario', 'Cantidad_Ventas',
+        'Valor_Pagado', 'Descuento_Total', 'flag_tiene_ventas',
+    ]
+    df = pd.read_csv('data/v2/inventario_ventas_sku.csv.gz', compression='gzip')
+    return df[[c for c in cols if c in df.columns]]
+
+
+@st.cache_data
+def cargar_despacho():
+    """Carga despacho_sku.csv.gz — solo columnas necesarias para KDE."""
+    return pd.read_csv(
+        'data/v2/despacho_sku.csv.gz',
+        compression='gzip',
+        usecols=['Canal', 'Formato', 'Tienda', 'Marca', 'Genero', 'Tipo',
+                 'Precio_Lista', 'Despacho'],
+    )
+
+
+grupos   = cargar_grupos()
+sku      = cargar_sku()
+despacho = cargar_despacho()
 
 
 # =============================================================================
-# ENCABEZADO Y CONTEXTO DE DATOS
+# ENCABEZADO
 # =============================================================================
 
-st.title('Análisis de Oferta vs. Demanda por Rango de Precio')
+st.title('Análisis de Demanda Pasada vs. Inventario Actual por Rango de Precio')
 
-# Infiere fechas dinamicamente desde los datos.
-periodo_inv = str(grupos['Formato'].iloc[0])  # placeholder — se lee de grupos
+# Expander: acerca del reporte
+with st.expander('ℹ️ Acerca de este reporte y glosario de términos', expanded=False):
+    st.markdown("""
+**¿Qué muestra este reporte?**
+Compara la distribución del inventario actual con la distribución de la demanda histórica
+por rango de precio. El objetivo es identificar si el stock disponible hoy está concentrado
+en los rangos de precio donde históricamente ha habido mayor demanda.
 
-# Periodo de inventario desde grupos_kde (campo Precio_Lista_Mediana existe — inferimos desde sku).
-periodo_inv_str = 'mayo 2026'  # se sobreescribe abajo si hay columna Periodo
+**Importante:** se comparan dos períodos distintos.
+- La **demanda pasada** refleja lo que se vendió en un período histórico (YTD).
+- El **inventario actual** es una foto del stock disponible al cierre del último período.
+No se puede concluir que habrá quiebre futuro — solo que hay desalineación histórica.
 
-if 'Periodo' in sku.columns:
-    periodo_raw = sku['Periodo'].dropna().astype(str).unique()
-    if len(periodo_raw) == 1:
-        p = periodo_raw[0]
-        meses = {
-            '01':'enero','02':'febrero','03':'marzo','04':'abril',
-            '05':'mayo','06':'junio','07':'julio','08':'agosto',
-            '09':'septiembre','10':'octubre','11':'noviembre','12':'diciembre'
-        }
-        periodo_inv_str = f"{meses.get(p[4:6], p[4:6])} {p[:4]}"
+**Glosario:**
+- **Canal:** marca o grupo comercial al que pertenece la tienda (Pilatos, Diesel, Superdry, MFG, etc.)
+- **Formato:** tipo de operación de la tienda (Lineal, Outlet, Mixta, Franquicia, Online)
+- **Inventario propuesto:** referencia calculada que redistribuye el stock actual siguiendo
+  el patrón de demanda histórica. No es una predicción de demanda futura.
+- **Densidad relativa:** las curvas muestran concentración proporcional, no cantidades absolutas.
+  Un pico alto significa que ahí ocurre la mayor parte de la actividad en ese conjunto de datos.
+""")
 
-if 'Fecha_Venta' in sku.columns:
-    fechas_venta = pd.to_datetime(sku['Fecha_Venta'], errors='coerce').dropna()
-    if not fechas_venta.empty:
-        fecha_ini = fechas_venta.min().strftime('%d/%m/%Y')
-        fecha_fin = fechas_venta.max().strftime('%d/%m/%Y')
-        rango_ventas_str = f'{fecha_ini} al {fecha_fin}'
+# Expander: rangos de fechas
+with st.expander('📅 Rangos de datos y fechas de actualización', expanded=False):
+    # Infiere periodo de inventario desde grupos.
+    if 'Precio_Lista_Mediana' in grupos.columns:
+        periodo_inv = 'mayo 2026'  # fallback
     else:
-        rango_ventas_str = 'YTD 2026'
-else:
-    rango_ventas_str = 'YTD 2026'
+        periodo_inv = 'último período disponible'
 
-with st.expander('ℹ️ ¿Qué representan los datos de esta página?', expanded=True):
-    col_a, col_b, col_c, col_d = st.columns(4)
-    col_a.info(
-        f'**Inventario actual**\n\nSnapshot al cierre de **{periodo_inv_str}**. '
-        f'Refleja las unidades disponibles en cada tienda en ese momento.'
-    )
-    col_b.info(
-        f'**Ventas YTD**\n\nTransacciones registradas del **{rango_ventas_str}**. '
-        f'Representa la demanda realizada en el periodo.'
-    )
-    col_c.info(
-        f'**Despacho YTD**\n\nEntradas de mercancía en tránsito del **{rango_ventas_str}**. '
-        f'Aproxima lo que llegó a cada tienda en el periodo.'
-    )
-    col_d.info(
-        f'**Inventario propuesto**\n\nReferencia calculada: redistribuye el stock actual '
-        f'siguiendo el patrón de ventas históricas. No es una predicción de demanda futura.'
-    )
+    # Infiere rango de ventas desde sku si tiene Fecha_Venta.
+    if 'Fecha_Venta' in sku.columns:
+        fechas = pd.to_datetime(sku['Fecha_Venta'], errors='coerce').dropna()
+        if not fechas.empty:
+            rango_ventas = f"{fechas.min().strftime('%d/%m/%Y')} — {fechas.max().strftime('%d/%m/%Y')}"
+        else:
+            rango_ventas = 'YTD 2026'
+    else:
+        rango_ventas = 'YTD 2026'
 
-st.caption(
-    'Las curvas muestran concentración relativa por rango de precio, no cantidades absolutas. '
-    'Compara la forma de cada curva — cuando están desalineadas, el inventario no está '
-    'donde ha estado la demanda histórica.'
-)
+    col_f1, col_f2, col_f3 = st.columns(3)
+    with col_f1:
+        st.markdown(f"""
+**Inventario actual**
+Snapshot al cierre de **{periodo_inv}**.
+Refleja las unidades disponibles en cada punto de venta en ese momento.
+""")
+    with col_f2:
+        st.markdown(f"""
+**Demanda pasada (ventas y despacho)**
+Período analizado: **{rango_ventas}**.
+Acumulado desde el inicio del año hasta el último día del mes anterior.
+""")
+    with col_f3:
+        st.markdown("""
+**Actualización**
+Los datos se actualizan el primer día de cada mes.
+Al subir nuevos archivos a la carpeta `data/v2/`, este reporte
+se refresca automáticamente con el nuevo período.
+""")
 
 
 # =============================================================================
@@ -126,108 +147,62 @@ st.caption(
 # =============================================================================
 
 st.sidebar.header('Filtros')
-st.sidebar.caption('Los filtros son dinámicos — cada nivel muestra solo las opciones disponibles según la selección anterior.')
+st.sidebar.caption(
+    'Cada filtro muestra solo las opciones disponibles '
+    'según las selecciones anteriores.'
+)
 
 TODOS = '— Todos —'
 
-# Formato (marca comercial: Pilatos, Diesel, etc.)
-formatos_disp = [TODOS] + sorted(grupos['Formato'].dropna().unique().tolist())
-formato = st.sidebar.multiselect('Formato', options=formatos_disp, default=[TODOS])
-if TODOS in formato or not formato:
-    mask_formato = pd.Series([True] * len(grupos))
-    formato_activo = []
-else:
-    formato_activo = formato
-    mask_formato = grupos['Formato'].isin(formato_activo)
 
-# Canal (tipo de operacion: Lineal, Outlet, etc.)
-canales_disp = [TODOS] + sorted(grupos[mask_formato]['Canal'].dropna().unique().tolist())
-canal = st.sidebar.multiselect('Canal', options=canales_disp, default=[TODOS])
-if TODOS in canal or not canal:
-    mask_canal = mask_formato
-    canal_activo = []
-else:
-    canal_activo = canal
-    mask_canal = mask_formato & grupos['Canal'].isin(canal_activo)
+def multiselect_con_todos(label, opciones, key):
+    """Selector multiple con opcion Todos."""
+    sel = st.sidebar.multiselect(label, [TODOS] + opciones, default=[TODOS], key=key)
+    if TODOS in sel or not sel:
+        return []
+    return sel
+
+
+# Canal (Pilatos, Diesel, etc.)
+canales_disp = sorted(grupos['Canal'].dropna().unique().tolist())
+canal_sel = multiselect_con_todos('Canal', canales_disp, 'canal')
+mask_canal = grupos['Canal'].isin(canal_sel) if canal_sel else pd.Series([True] * len(grupos))
+
+# Formato (Lineal, Outlet, etc.)
+formatos_disp = sorted(grupos[mask_canal]['Formato'].dropna().unique().tolist())
+formato_sel = multiselect_con_todos('Formato', formatos_disp, 'formato')
+mask_formato = mask_canal & (grupos['Formato'].isin(formato_sel) if formato_sel else pd.Series([True] * len(grupos)))
 
 # Tienda
-tiendas_disp = [TODOS] + sorted(grupos[mask_canal]['Tienda'].dropna().unique().tolist())
-tienda = st.sidebar.multiselect('Tienda', options=tiendas_disp, default=[TODOS])
-if TODOS in tienda or not tienda:
-    mask_tienda = mask_canal
-    tienda_activo = []
-else:
-    tienda_activo = tienda
-    mask_tienda = mask_canal & grupos['Tienda'].isin(tienda_activo)
+tiendas_disp = sorted(grupos[mask_formato]['Tienda'].dropna().unique().tolist())
+tienda_sel = multiselect_con_todos('Tienda', tiendas_disp, 'tienda')
+mask_tienda = mask_formato & (grupos['Tienda'].isin(tienda_sel) if tienda_sel else pd.Series([True] * len(grupos)))
 
 # Marca
-marcas_disp = [TODOS] + sorted(grupos[mask_tienda]['Marca'].dropna().unique().tolist())
-marca = st.sidebar.multiselect('Marca', options=marcas_disp, default=[TODOS])
-if TODOS in marca or not marca:
-    mask_marca = mask_tienda
-    marca_activo = []
-else:
-    marca_activo = marca
-    mask_marca = mask_tienda & grupos['Marca'].isin(marca_activo)
+marcas_disp = sorted(grupos[mask_tienda]['Marca'].dropna().unique().tolist())
+marca_sel = multiselect_con_todos('Marca', marcas_disp, 'marca')
+mask_marca = mask_tienda & (grupos['Marca'].isin(marca_sel) if marca_sel else pd.Series([True] * len(grupos)))
 
 # Genero
-generos_disp = [TODOS] + sorted(grupos[mask_marca]['Genero'].dropna().unique().tolist())
-genero = st.sidebar.multiselect('Género', options=generos_disp, default=[TODOS])
-if TODOS in genero or not genero:
-    mask_genero = mask_marca
-    genero_activo = []
-else:
-    genero_activo = genero
-    mask_genero = mask_marca & grupos['Genero'].isin(genero_activo)
+generos_disp = sorted(grupos[mask_marca]['Genero'].dropna().unique().tolist())
+genero_sel = multiselect_con_todos('Género', generos_disp, 'genero')
+mask_genero = mask_marca & (grupos['Genero'].isin(genero_sel) if genero_sel else pd.Series([True] * len(grupos)))
 
 # Tipo
-tipos_disp = [TODOS] + sorted(grupos[mask_genero]['Tipo'].dropna().unique().tolist())
-tipo = st.sidebar.multiselect('Tipo', options=tipos_disp, default=[TODOS])
-if TODOS in tipo or not tipo:
-    mask_tipo = mask_genero
-    tipo_activo = []
-else:
-    tipo_activo = tipo
-    mask_tipo = mask_genero & grupos['Tipo'].isin(tipo_activo)
+tipos_disp = sorted(grupos[mask_genero]['Tipo'].dropna().unique().tolist())
+tipo_sel = multiselect_con_todos('Tipo', tipos_disp, 'tipo')
+mask_tipo = mask_genero & (grupos['Tipo'].isin(tipo_sel) if tipo_sel else pd.Series([True] * len(grupos)))
+
+grupos_sel = grupos[mask_tipo].copy()
 
 
 # =============================================================================
-# FILTRADO DE DATOS
+# VALIDACION
 # =============================================================================
 
-def aplicar_filtro(df: pd.DataFrame) -> pd.DataFrame:
-    """Aplica los filtros activos a cualquier dataframe con las mismas columnas."""
-    mask = pd.Series([True] * len(df))
-    if formato_activo:
-        mask &= df['Formato'].isin(formato_activo)
-    if canal_activo:
-        mask &= df['Canal'].isin(canal_activo)
-    if tienda_activo:
-        mask &= df['Tienda'].isin(tienda_activo)
-    if marca_activo:
-        mask &= df['Marca'].isin(marca_activo)
-    if genero_activo:
-        mask &= df['Genero'].isin(genero_activo)
-    if tipo_activo:
-        mask &= df['Tipo'].isin(tipo_activo)
-    return df[mask].copy()
-
-
-grupos_sel  = grupos[mask_tipo].copy()
-sku_sel     = aplicar_filtro(sku)
-despacho_sel = aplicar_filtro(despacho)
-
-if grupos_sel.empty or sku_sel.empty:
+if grupos_sel.empty:
     st.warning('No hay datos para la selección actual. Ajusta los filtros.')
     st.stop()
-
-# Advertencia si algún grupo no es confiable.
-n_no_confiables = (~grupos_sel['flag_confiable']).sum()
-if n_no_confiables > 0:
-    st.warning(
-        f'⚠️ {n_no_confiables} de {len(grupos_sel)} grupos tienen menos de 10 SKUs en inventario. '
-        f'Las curvas de esos grupos son menos confiables estadísticamente.'
-    )
 
 
 # =============================================================================
@@ -236,13 +211,16 @@ if n_no_confiables > 0:
 
 col1, col2, col3, col4 = st.columns(4)
 col1.metric('Unidades en inventario', f'{grupos_sel["Cantidad_Inventario"].sum():,.0f}')
-col2.metric('Unidades vendidas YTD',  f'{grupos_sel["Cantidad_Ventas"].sum():,.0f}')
-col3.metric('SKUs con ventas',        f'{grupos_sel["n_skus_con_ventas"].sum():,} de {grupos_sel["n_skus_inventario"].sum():,}')
-col4.metric('Grupos analizados',      f'{len(grupos_sel):,}')
+col2.metric('Unidades demanda pasada', f'{grupos_sel["Cantidad_Ventas"].sum():,.0f}')
+col3.metric(
+    'SKUs con demanda',
+    f'{grupos_sel["n_skus_con_ventas"].sum():,} / {grupos_sel["n_skus_inventario"].sum():,}'
+)
+col4.metric('SKUs sin demanda en el periodo', f'{(grupos_sel["n_skus_inventario"] - grupos_sel["n_skus_con_ventas"]).sum():,}')
 
 
 # =============================================================================
-# PREPARACION DE DATOS PARA KDE
+# PREPARACION PARA KDE — desde grupos_kde (liviano)
 # =============================================================================
 
 def calcular_fence(s: pd.Series) -> tuple[float, float]:
@@ -252,14 +230,39 @@ def calcular_fence(s: pd.Series) -> tuple[float, float]:
     return max(s.min(), q25 - 1.5 * iqr), min(s.max(), q75 + 1.5 * iqr)
 
 
-inv_agg   = sku_sel.groupby('Precio_Lista')['Cantidad_Inventario'].sum().reset_index()
-ventas_agg = (
-    sku_sel[sku_sel['flag_tiene_ventas']]
-    .groupby('Precio_Lista')['Cantidad_Ventas']
-    .sum()
+# Agrega desde grupos_sel usando Precio_Lista_Mediana como precio representativo.
+inv_agg = (
+    grupos_sel
+    .groupby('Precio_Lista_Mediana')
+    .agg(Cantidad_Inventario=('Cantidad_Inventario', 'sum'))
     .reset_index()
+    .rename(columns={'Precio_Lista_Mediana': 'Precio_Lista'})
 )
-desp_agg  = despacho_sel.groupby('Precio_Lista')['Despacho'].sum().reset_index()
+
+ventas_agg = (
+    grupos_sel[grupos_sel['flag_tiene_ventas']]
+    .groupby('Precio_Lista_Mediana')
+    .agg(Cantidad_Ventas=('Cantidad_Ventas', 'sum'))
+    .reset_index()
+    .rename(columns={'Precio_Lista_Mediana': 'Precio_Lista'})
+)
+
+# Despacho — filtra desde el CSV de despacho.
+def filtrar_df(df):
+    mask = pd.Series([True] * len(df))
+    if canal_sel:   mask &= df['Canal'].isin(canal_sel)
+    if formato_sel: mask &= df['Formato'].isin(formato_sel)
+    if tienda_sel:  mask &= df['Tienda'].isin(tienda_sel)
+    if marca_sel:   mask &= df['Marca'].isin(marca_sel)
+    if genero_sel:  mask &= df['Genero'].isin(genero_sel)
+    if tipo_sel:    mask &= df['Tipo'].isin(tipo_sel)
+    return df[mask]
+
+desp_sel = filtrar_df(despacho)
+desp_agg = (
+    desp_sel.groupby('Precio_Lista')['Despacho'].sum().reset_index()
+    if not desp_sel.empty else pd.DataFrame(columns=['Precio_Lista', 'Despacho'])
+)
 
 datos_insuficientes = (
     inv_agg.empty or inv_agg['Precio_Lista'].nunique() < 2 or
@@ -267,10 +270,12 @@ datos_insuficientes = (
 )
 
 if datos_insuficientes:
-    st.warning('No hay suficientes datos de precio para construir las curvas con la selección actual.')
+    st.warning(
+        'No hay suficientes datos de precio para construir las curvas. '
+        'Intenta ampliar los filtros o seleccionar un grupo con más SKUs.'
+    )
     st.stop()
 
-# Rango de precio con fence IQR sobre el conjunto combinado.
 todos_precios = pd.concat(
     [inv_agg['Precio_Lista'], ventas_agg['Precio_Lista']] +
     ([desp_agg['Precio_Lista']] if not desp_agg.empty else [])
@@ -287,7 +292,17 @@ rango = np.linspace(p_min, p_max, 1000)
 # CURVAS KDE
 # =============================================================================
 
-st.subheader('Curvas de Densidad')
+st.subheader('Curvas de Densidad por Rango de Precio')
+
+# Titulo dinamico segun filtros activos.
+partes = []
+if canal_sel:   partes.append(', '.join(canal_sel))
+if formato_sel: partes.append(', '.join(formato_sel))
+if tienda_sel:  partes.append(', '.join(tienda_sel))
+if marca_sel:   partes.append(', '.join(marca_sel))
+if genero_sel:  partes.append(', '.join(genero_sel))
+if tipo_sel:    partes.append(', '.join(tipo_sel))
+titulo = ' | '.join(partes) if partes else 'Todos los grupos'
 
 fig, ax = plt.subplots(figsize=(12, 6))
 
@@ -297,22 +312,20 @@ ax.plot(rango, kde_inv(rango), color='#1f77b4', linewidth=2.5,
 
 kde_ventas = gaussian_kde(ventas_agg['Precio_Lista'], weights=ventas_agg['Cantidad_Ventas'])
 ax.plot(rango, kde_ventas(rango), color='#d62728', linewidth=2.5,
-        label='Ventas YTD — lo que se vendió')
+        label='Demanda pasada — lo que se vendió')
 
 if not desp_agg.empty and desp_agg['Precio_Lista'].nunique() >= 2:
     kde_desp = gaussian_kde(desp_agg['Precio_Lista'], weights=desp_agg['Despacho'])
     ax.plot(rango, kde_desp(rango), color='#2ca02c', linewidth=2, linestyle='--',
             label='Despacho YTD — lo que entró')
 
-# Curva propuesta: bins sobre rango combinado para coherencia.
+# Curva propuesta: bins sobre rango combinado.
 precio_combinado = pd.concat([inv_agg['Precio_Lista'], ventas_agg['Precio_Lista']]).dropna()
 try:
-    bins_compartidos = pd.qcut(precio_combinado, q=10, duplicates='drop').cat.categories
-    ventas_agg['Intervalo'] = pd.cut(ventas_agg['Precio_Lista'], bins=bins_compartidos, include_lowest=True)
-    vpb = (
-        ventas_agg.groupby('Intervalo', observed=True)['Cantidad_Ventas']
-        .sum().reset_index()
-    )
+    bins_prop = pd.qcut(precio_combinado, q=10, duplicates='drop').cat.categories
+    ventas_prop = ventas_agg.copy()
+    ventas_prop['Intervalo'] = pd.cut(ventas_prop['Precio_Lista'], bins=bins_prop, include_lowest=True)
+    vpb = ventas_prop.groupby('Intervalo', observed=True)['Cantidad_Ventas'].sum().reset_index()
     vpb = vpb[vpb['Cantidad_Ventas'] > 0]
     if len(vpb) >= 2:
         vpb['pct']      = vpb['Cantidad_Ventas'] / vpb['Cantidad_Ventas'].sum()
@@ -323,18 +336,9 @@ try:
 except Exception:
     pass
 
-titulo_filtros = ' | '.join(filter(None, [
-    ', '.join(formato_activo) if formato_activo else 'Todos los formatos',
-    ', '.join(canal_activo)   if canal_activo   else None,
-    ', '.join(tienda_activo)  if tienda_activo  else None,
-    ', '.join(marca_activo)   if marca_activo   else None,
-    ', '.join(genero_activo)  if genero_activo  else None,
-    ', '.join(tipo_activo)    if tipo_activo    else None,
-]))
-
 ax.set_xlabel('Precio Lista (COP)', fontsize=11)
 ax.set_ylabel('Densidad relativa', fontsize=11)
-ax.set_title(f'Oferta vs. Demanda por Rango de Precio\n{titulo_filtros}', fontsize=12, fontweight='bold')
+ax.set_title(f'Demanda Pasada vs. Inventario Actual\n{titulo}', fontsize=12, fontweight='bold')
 ax.set_yticklabels([])
 ax.legend(fontsize=10)
 ax.grid(True, alpha=0.2)
@@ -347,14 +351,14 @@ st.pyplot(fig)
 # TABLA DE OPTIMIZACION
 # =============================================================================
 
-st.subheader('Optimización por Intervalo de Precio')
+st.subheader('Distribución por Rango de Precio')
 st.caption(
-    'Compara el porcentaje del inventario actual vs. el porcentaje de ventas en cada rango de precio. '
-    'El inventario propuesto redistribuye el stock total según el patrón de ventas históricas.'
+    'Compara qué porcentaje del inventario actual está en cada rango de precio '
+    'versus qué porcentaje de la demanda pasada ocurrió en ese rango. '
+    'El inventario propuesto redistribuye el stock total siguiendo el patrón de demanda histórica.'
 )
 
 try:
-    # Bins calculados sobre el rango combinado — garantiza coherencia entre inventario y ventas.
     precio_combinado_tabla = pd.concat([
         inv_agg['Precio_Lista'], ventas_agg['Precio_Lista']
     ]).dropna()
@@ -363,73 +367,68 @@ try:
     inv_agg['Intervalo']    = pd.cut(inv_agg['Precio_Lista'],    bins=bins_tabla, include_lowest=True)
     ventas_agg['Intervalo'] = pd.cut(ventas_agg['Precio_Lista'], bins=bins_tabla, include_lowest=True)
 
-    inv_bin = inv_agg.groupby('Intervalo', observed=True)['Cantidad_Inventario'].sum().reset_index()
-    ven_bin = ventas_agg.groupby('Intervalo', observed=True)['Cantidad_Ventas'].sum().reset_index()
+    inv_bin    = inv_agg.groupby('Intervalo', observed=True)['Cantidad_Inventario'].sum().reset_index()
+    ventas_bin = ventas_agg.groupby('Intervalo', observed=True)['Cantidad_Ventas'].sum().reset_index()
 
-    df_tabla = inv_bin.merge(ven_bin, on='Intervalo', how='left')
+    df_tabla = inv_bin.merge(ventas_bin, on='Intervalo', how='left')
     df_tabla['Cantidad_Ventas'] = df_tabla['Cantidad_Ventas'].fillna(0)
 
     total_inv    = df_tabla['Cantidad_Inventario'].sum()
     total_ventas = df_tabla['Cantidad_Ventas'].sum()
 
     df_tabla['% Inventario actual']  = (df_tabla['Cantidad_Inventario'] / total_inv * 100).round(1)
-    df_tabla['% Ventas YTD']         = (df_tabla['Cantidad_Ventas'] / total_ventas * 100).round(1) if total_ventas > 0 else 0.0
-    df_tabla['Inventario propuesto'] = (df_tabla['% Ventas YTD'] / 100 * total_inv).round(0).astype(int)
+    df_tabla['% Demanda pasada']     = (
+        (df_tabla['Cantidad_Ventas'] / total_ventas * 100).round(1)
+        if total_ventas > 0 else 0.0
+    )
+    df_tabla['Inventario propuesto'] = (df_tabla['% Demanda pasada'] / 100 * total_inv).round(0).astype(int)
     df_tabla['Diferencia']           = df_tabla['Inventario propuesto'] - df_tabla['Cantidad_Inventario'].astype(int)
     df_tabla['Intervalo']            = df_tabla['Intervalo'].astype(str)
 
     df_tabla = df_tabla.rename(columns={
         'Intervalo':           'Rango de Precio',
         'Cantidad_Inventario': 'Inventario actual',
-        'Cantidad_Ventas':     'Ventas YTD',
+        'Cantidad_Ventas':     'Demanda pasada (unidades)',
     })
 
     st.dataframe(
         df_tabla[[
             'Rango de Precio', 'Inventario actual', '% Inventario actual',
-            'Ventas YTD', '% Ventas YTD', 'Inventario propuesto', 'Diferencia'
+            'Demanda pasada (unidades)', '% Demanda pasada',
+            'Inventario propuesto', 'Diferencia',
         ]],
         use_container_width=True,
         hide_index=True,
     )
 
 except Exception as e:
-    st.warning(f'No se pudo construir la tabla de optimización: {e}')
+    st.warning(f'No se pudo construir la tabla: {e}')
 
 
 # =============================================================================
-# DETALLE Y DESCARGA A NIVEL SKU
+# DESCARGA A NIVEL SKU
 # =============================================================================
 
 st.subheader('Detalle a Nivel SKU')
+st.caption('La tabla y el CSV incluyen todas las combinaciones de código de barras y tienda con inventario disponible.')
 
-columnas_mostrar = [
-    'Codigo_Barras', 'Referencia', 'Talla', 'Color',
-    'Marca', 'MarcaLinea', 'Genero', 'Categoria', 'Tipo',
-    'Formato', 'Canal', 'Tienda',
-    'Precio_Lista', 'Precio_Unitario',
-    'Cantidad_Inventario', 'Cantidad_Ventas',
-    'Valor_Pagado', 'Descuento_Total',
-    'flag_tiene_ventas',
-]
+# Filtra sku solo cuando el usuario llega a esta seccion.
+sku_sel = filtrar_df(sku)
 
-columnas_existentes = [c for c in columnas_mostrar if c in sku_sel.columns]
+if sku_sel.empty:
+    st.info('No hay detalle SKU para la selección actual.')
+else:
+    st.dataframe(
+        sku_sel.sort_values('Cantidad_Inventario', ascending=False),
+        use_container_width=True,
+        hide_index=True,
+    )
 
-st.dataframe(
-    sku_sel[columnas_existentes].sort_values('Cantidad_Inventario', ascending=False),
-    use_container_width=True,
-    hide_index=True,
-)
-
-csv_bytes = sku_sel[columnas_existentes].to_csv(index=False).encode('utf-8')
-nombre_archivo = 'sku_detalle.csv'
-if formato_activo:
-    nombre_archivo = f'sku_{"_".join(formato_activo)}.csv'.replace(' ', '_')
-
-st.download_button(
-    label='⬇️ Descargar detalle SKU (CSV)',
-    data=csv_bytes,
-    file_name=nombre_archivo,
-    mime='text/csv',
-)
-
+    csv_bytes = sku_sel.to_csv(index=False).encode('utf-8')
+    partes_nombre = [p.replace(' ', '_') for p in partes[:3]] if partes else ['todos']
+    st.download_button(
+        label='⬇️ Descargar detalle SKU (CSV)',
+        data=csv_bytes,
+        file_name=f'sku_{"_".join(partes_nombre)}.csv',
+        mime='text/csv',
+    )
