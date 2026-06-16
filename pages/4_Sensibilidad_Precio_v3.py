@@ -75,10 +75,9 @@ entre el inventario disponible y los patrones históricos de compra.
 """)
 
 with st.expander('📅 Rangos de datos y fechas de actualización', expanded=False):
-    meta = pd.read_csv('data/v2/metadata.csv').iloc[0]
     c1, c2, c3 = st.columns(3)
-    c1.info(f'**Inventario actual**\nSnapshot al cierre de **{meta["periodo_inventario"]}**.')
-    c2.info(f'**Demanda pasada y despacho**\nPeríodo: **{meta["fecha_min_venta"]}** al **{meta["fecha_max_venta"]}**.')
+    c1.info('**Inventario actual**\nSnapshot al cierre del último mes disponible.')
+    c2.info('**Demanda pasada y despacho**\nAcumulado YTD desde enero hasta el último mes.')
     c3.info('**Actualización**\nPrimer día de cada mes al subir nuevos archivos a `data/v2/`.')
 
 
@@ -179,11 +178,10 @@ titulo_filtros = ' | '.join(partes) if partes else 'Todos los grupos'
 # METRICAS RESUMEN
 # =============================================================================
 
-col1, col2, col3, col4 = st.columns(4)
-col1.metric('Unidades en inventario',  f'{grupos_sel["Cantidad_Inventario"].sum():,.0f}')
-col2.metric('Demanda pasada',          f'{grupos_sel["Cantidad_Ventas"].sum():,.0f}')
-col3.metric('Con demanda / total',     f'{grupos_sel["n_skus_con_ventas"].sum():,} / {grupos_sel["n_skus_inventario"].sum():,}')
-col4.metric('Sin demanda en periodo',  f'{(grupos_sel["n_skus_inventario"] - grupos_sel["n_skus_con_ventas"]).sum():,}')
+col1, col2, col3 = st.columns(3)
+col1.metric('Unidades en inventario', f'{grupos_sel["Cantidad_Inventario"].sum():,.0f}')
+col2.metric('Demanda pasada',         f'{grupos_sel["Cantidad_Ventas"].sum():,.0f}')
+col3.metric('Despacho YTD',           f'{grupos_sel["Despacho"].sum():,.0f}')
 
 
 # =============================================================================
@@ -369,4 +367,3 @@ with tab3:
             file_name=f'resumen_{partes_nombre}.csv',
             mime='text/csv',
         )
-
